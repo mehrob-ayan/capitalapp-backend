@@ -16,6 +16,7 @@ type Config struct {
 	JWTSecret     string
 	AllowDevLogin bool
 	CORSOrigins   string
+	WebDir        string // if set, serve the built frontend from this directory
 }
 
 func Load() Config {
@@ -28,6 +29,7 @@ func Load() Config {
 		JWTSecret:     getenv("JWT_SECRET", "dev-secret-change-me"),
 		AllowDevLogin: getenv("ALLOW_DEV_LOGIN", "false") == "true",
 		CORSOrigins:   getenv("CORS_ORIGINS", "*"),
+		WebDir:        os.Getenv("WEB_DIR"),
 	}
 
 	if cfg.BotToken == "" && !cfg.AllowDevLogin {

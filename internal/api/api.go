@@ -39,6 +39,21 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 
 	e.GET("/__health", s.health)
 
+	// Serve the built frontend from the same origin (no CORS, one tunnel).
+	// HTML5 mode falls back to index.html for client-side routes; the API and
+	// health endpoints are skipped so they still reach their handlers.
+	if cfg.WebDir != "" {
+		e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
+			Root:  cfg.WebDir,
+			Index: "index.html",
+			HTML5: true,
+			Skipper: func(c echo.Context) bool {
+				p := c.Request().URL.Path
+				return strings.HasPrefix(p, "/api") || p == "/__health"
+			},
+		}))
+	}
+
 	v1 := e.Group("/api/v1")
 	v1.POST("/auth/telegram", s.authTelegram)
 
