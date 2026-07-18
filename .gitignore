@@ -1,0 +1,11 @@
+# env / secrets
+.env
+*.local
+
+# build artifacts
+bin/
+tmp/
+
+# misc
+.DS_Store
+*.log
