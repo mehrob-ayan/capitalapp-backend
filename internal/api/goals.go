@@ -13,21 +13,12 @@ import (
 
 // netWorthUSD sums the user's current net worth in USD (assets − liabilities).
 func (s *Server) netWorthUSD(uid uint) (float64, error) {
-	var assets []model.Asset
-	if err := s.db.Where("user_id = ?", uid).Find(&assets).Error; err != nil {
-		return 0, err
-	}
 	rates, err := s.userRates(uid)
 	if err != nil {
 		return 0, err
 	}
-	now := time.Now()
-	var nw float64
-	for _, a := range assets {
-		m := calc.Compute(a, "USD", rates, now)
-		nw += m.ValueBase - m.LiabilityBase
-	}
-	return nw, nil
+	assets, liab, err := s.totalsAsOf(uid, rates, time.Now())
+	return assets - liab, err
 }
 
 type goalInput struct {

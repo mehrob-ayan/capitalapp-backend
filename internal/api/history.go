@@ -11,10 +11,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// recordSnapshot upserts today's net-worth snapshot (stored in USD). Best-effort:
-// history is a nice-to-have, so a failure here must not break the overview.
-func (s *Server) recordSnapshot(uid uint, netUSD, assetsUSD, liabUSD float64) {
-	day := time.Now().UTC().Truncate(24 * time.Hour)
+// upsertSnapshotDay writes (or overwrites) the net-worth snapshot for a given
+// day. Idempotent — the (user, date) unique index makes re-runs harmless.
+func (s *Server) upsertSnapshotDay(uid uint, day time.Time, netUSD, assetsUSD, liabUSD float64) {
+	day = day.UTC().Truncate(24 * time.Hour)
 	_ = s.db.
 		Where(model.Snapshot{UserID: uid, Date: day}).
 		Assign(model.Snapshot{NetWorthUSD: netUSD, AssetsUSD: assetsUSD, LiabilitiesUSD: liabUSD}).

@@ -148,11 +148,9 @@ func (s *Server) overview(c echo.Context) error {
 		})
 	}
 
-	s.recordSnapshot(uid,
-		calc.Convert(totalAssets-totalLiab, base, "USD", rates),
-		calc.Convert(totalAssets, base, "USD", rates),
-		calc.Convert(totalLiab, base, "USD", rates),
-	)
+	// Opening the overview also catches up any snapshots missed while the
+	// machine was asleep/off (idempotent).
+	_ = s.backfillSnapshots(uid)
 
 	return c.JSON(http.StatusOK, overviewResp{
 		BaseCurrency: base,

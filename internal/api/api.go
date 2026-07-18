@@ -64,6 +64,10 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 	authed.PATCH("/goals/:id", s.updateGoal)
 	authed.DELETE("/goals/:id", s.deleteGoal)
 
+	// Catch-up worker: backfills history snapshots missed while the machine
+	// was asleep/off. Runs on startup and hourly.
+	go s.runWorkers()
+
 	return e
 }
 
