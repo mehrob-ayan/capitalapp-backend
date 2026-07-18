@@ -21,6 +21,54 @@ func (s *Server) recordSnapshot(uid uint, netUSD, assetsUSD, liabUSD float64) {
 		FirstOrCreate(&model.Snapshot{}).Error
 }
 
+// tracksValue lists kinds whose value the user sets manually and which benefit
+// from a per-asset value chart (they appreciate/depreciate over time).
+var tracksValue = map[model.AssetKind]bool{
+	model.KindRealEstate: true,
+	model.KindCar:        true,
+	model.KindInvestment: true,
+}
+
+// recordAssetValue upserts today's value point for an asset. Best-effort.
+func (s *Server) recordAssetValue(assetID, userID uint, value float64) {
+	if assetID == 0 {
+		return
+	}
+	day := time.Now().UTC().Truncate(24 * time.Hour)
+	_ = s.db.
+		Where(model.AssetValue{AssetID: assetID, Date: day}).
+		Assign(model.AssetValue{UserID: userID, Value: value}).
+		FirstOrCreate(&model.AssetValue{}).Error
+}
+
+type assetValuePoint struct {
+	Date  string  `json:"date"`
+	Value float64 `json:"value"`
+}
+
+type assetHistoryResp struct {
+	Currency string            `json:"currency"`
+	Points   []assetValuePoint `json:"points"`
+}
+
+// assetHistory returns the value-over-time points for a single asset.
+func (s *Server) assetHistory(c echo.Context) error {
+	uid := c.Get(ctxUserID).(uint)
+	a, err := s.findAsset(uid, c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "asset not found")
+	}
+	var rows []model.AssetValue
+	if err := s.db.Where("asset_id = ?", a.ID).Order("date asc").Find(&rows).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+	}
+	points := make([]assetValuePoint, 0, len(rows))
+	for _, r := range rows {
+		points = append(points, assetValuePoint{Date: r.Date.Format("2006-01-02"), Value: round2(r.Value)})
+	}
+	return c.JSON(http.StatusOK, assetHistoryResp{Currency: a.Currency, Points: points})
+}
+
 type historyPoint struct {
 	Date     string  `json:"date"`
 	NetWorth float64 `json:"netWorth"`

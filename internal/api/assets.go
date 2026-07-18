@@ -201,9 +201,12 @@ func (s *Server) createAsset(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	a.BalanceAsOf = time.Now() // anchor debt interest accrual to now
+	a.BalanceAsOf = time.Now() // anchor interest accrual to now
 	if err := s.db.Create(&a).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+	}
+	if tracksValue[a.Kind] {
+		s.recordAssetValue(a.ID, uid, a.Value)
 	}
 	rates, err := s.userRates(uid)
 	if err != nil {
@@ -253,6 +256,9 @@ func (s *Server) updateAsset(c echo.Context) error {
 	if err := s.db.Save(&updated).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
+	if tracksValue[updated.Kind] {
+		s.recordAssetValue(updated.ID, uid, updated.Value)
+	}
 	rates, err := s.userRates(uid)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -269,6 +275,7 @@ func (s *Server) deleteAsset(c echo.Context) error {
 	if err := s.db.Delete(&model.Asset{}, a.ID).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
+	s.db.Where("asset_id = ?", a.ID).Delete(&model.AssetValue{})
 	return c.NoContent(http.StatusNoContent)
 }
 

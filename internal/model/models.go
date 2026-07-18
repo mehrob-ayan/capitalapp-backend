@@ -96,6 +96,17 @@ type Snapshot struct {
 	LiabilitiesUSD float64   `json:"-"`
 }
 
+// AssetValue records the value of a single asset on a given day, so its own
+// growth (e.g. a flat that appreciates) can be charted. One row per asset per
+// day, upserted whenever the value is entered.
+type AssetValue struct {
+	ID      uint      `gorm:"primaryKey" json:"-"`
+	AssetID uint      `gorm:"uniqueIndex:idx_asset_date;not null" json:"-"`
+	UserID  uint      `gorm:"index;not null" json:"-"`
+	Date    time.Time `gorm:"uniqueIndex:idx_asset_date;not null" json:"date"`
+	Value   float64   `json:"value"`
+}
+
 // Goal is a target capital amount. Progress is computed against current net
 // worth; ETA uses the optional monthly contribution.
 type Goal struct {

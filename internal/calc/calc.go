@@ -52,8 +52,9 @@ func Compute(a model.Asset, base string, r Rates, asOf time.Time) AssetMetrics {
 
 	switch a.Kind {
 	case model.KindDeposit:
-		m.ValueBase = conv(a.Value)
-		m.MonthlyFlowBase = conv(a.Value * a.RatePercent / 100 / 12)
+		// Interest compounds into the balance (капитализация): the deposit grows
+		// daily, so the yield shows up as value growth rather than separate flow.
+		m.ValueBase = conv(AccrueBalance(a.Value, a.RatePercent, a.BalanceAsOf, asOf))
 		m.CashYieldPercent = a.RatePercent
 
 	case model.KindCash:

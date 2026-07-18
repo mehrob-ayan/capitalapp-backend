@@ -50,6 +50,7 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 	authed.GET("/assets", s.listAssets)
 	authed.POST("/assets", s.createAsset)
 	authed.GET("/assets/:id", s.getAsset)
+	authed.GET("/assets/:id/history", s.assetHistory)
 	authed.PATCH("/assets/:id", s.updateAsset)
 	authed.DELETE("/assets/:id", s.deleteAsset)
 
