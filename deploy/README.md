@@ -10,32 +10,39 @@ PostgreSQL держит сам Docker: в `docker-compose.yml` стоит `resta
 поэтому контейнер поднимается, как только запускается Docker Desktop. Включи в
 Docker Desktop «Start Docker Desktop when you sign in».
 
-## Установка
+## Установка (локально на этом Маке)
+
+Режим: только этот Мак, фронт+бэк одним бинарником, без Telegram/туннеля.
+Адрес: **http://capital.test:9797**
 
 ```bash
 BASE=~/Ayan/capital-app
 
-# 1. Собрать фронт и бинарник бэкенда
+# 1. Собрать фронт и бинарник
 (cd $BASE/web && npm run build)
 (cd $BASE/server && go build -o bin/api ./cmd/api)
 
-# 2. Прод-конфиг: $BASE/server/.env
-#    ALLOW_DEV_LOGIN=false, TELEGRAM_BOT_TOKEN=..., JWT_SECRET=..., WEB_DIR=../web/dist
+# 2. .env уже настроен: HOST=127.0.0.1, PORT=9797, ALLOW_DEV_LOGIN=true, WEB_DIR=../web/dist
 
-# 3. Настроить туннель Tailscale Funnel (см. раздел ниже) — один раз
+# 3. Локальный домен (нужен sudo — выполни сам)
+echo "127.0.0.1 capital.test" | sudo tee -a /etc/hosts
 
 # 4. Папки и права
 mkdir -p $BASE/logs ~/Library/LaunchAgents
 chmod +x $BASE/server/scripts/*.sh
 
-# 5. Поставить сервисы
-cp $BASE/server/deploy/launchd/*.plist ~/Library/LaunchAgents/
+# 5. Автозапуск: бэкенд + ежедневный бэкап (туннель НЕ нужен)
+cp $BASE/server/deploy/launchd/com.capitalapp.backend.plist ~/Library/LaunchAgents/
+cp $BASE/server/deploy/launchd/com.capitalapp.backup.plist  ~/Library/LaunchAgents/
 launchctl load -w ~/Library/LaunchAgents/com.capitalapp.backend.plist
-launchctl load -w ~/Library/LaunchAgents/com.capitalapp.tunnel.plist
 launchctl load -w ~/Library/LaunchAgents/com.capitalapp.backup.plist
 ```
 
-Перед установкой останови ручной `go run` (порт 8080 должен быть свободен).
+Перед `launchctl load` освободи порт 9797, если крутится ручной запуск:
+`lsof -ti tcp:9797 | xargs kill`. Затем открой **http://capital.test:9797** и добавь в закладки.
+
+Туннель (`com.capitalapp.tunnel`, раздел ниже) нужен только если однажды захочешь
+открыть доступ снаружи через Telegram — для локального режима он не используется.
 
 ## Туннель — Tailscale Funnel (разовая настройка)
 

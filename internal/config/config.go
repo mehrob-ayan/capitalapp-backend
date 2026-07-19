@@ -10,6 +10,7 @@ import (
 // Config holds runtime configuration, sourced from environment variables
 // (optionally loaded from a local .env file in development).
 type Config struct {
+	Host          string // bind address; empty = all interfaces, 127.0.0.1 = local only
 	Port          string
 	DatabaseURL   string
 	BotToken      string
@@ -23,6 +24,7 @@ func Load() Config {
 	_ = godotenv.Load() // .env is optional; ignore if missing
 
 	cfg := Config{
+		Host:          os.Getenv("HOST"),
 		Port:          getenv("PORT", "8080"),
 		DatabaseURL:   getenv("DATABASE_URL", "postgres://capital:capital@localhost:5432/capital?sslmode=disable"),
 		BotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),

@@ -48,12 +48,13 @@ func main() {
 
 	e := api.New(cfg, database)
 
+	addr := cfg.Host + ":" + cfg.Port
 	go func() {
-		if err := e.Start(":" + cfg.Port); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := e.Start(addr); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server: %v", err)
 		}
 	}()
-	log.Printf("capital-app api listening on :%s", cfg.Port)
+	log.Printf("capital-app api listening on %s", addr)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
