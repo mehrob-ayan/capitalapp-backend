@@ -101,6 +101,9 @@ func (s *Server) totalsAsOf(uid uint, rates calc.Rates, asOf time.Time) (assetsU
 		return 0, 0, err
 	}
 	for _, a := range assets {
+		if a.ExcludeFromNetWorth {
+			continue // shown in totals, but out of net worth (history/goals)
+		}
 		m := calc.Compute(a, "USD", rates, asOf)
 		assetsUSD += m.ValueBase
 		liabUSD += m.LiabilityBase

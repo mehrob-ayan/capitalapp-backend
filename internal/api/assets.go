@@ -37,23 +37,24 @@ var validCurrency = map[string]bool{"USD": true, "TJS": true, "UZS": true}
 // ---- request/response DTOs ----
 
 type assetInput struct {
-	Kind             string  `json:"kind"`
-	Name             string  `json:"name"`
-	Currency         string  `json:"currency"`
-	Value            float64 `json:"value"`
-	Invested         float64 `json:"invested"`
-	MonthlyIncome    float64 `json:"monthlyIncome"`
-	MonthlyPayment   float64 `json:"monthlyPayment"`
-	RatePercent      float64 `json:"ratePercent"`
-	PurchaseDate     *string `json:"purchaseDate"`
-	MaintenanceHours float64 `json:"maintenanceHours"`
-	Subtype          string  `json:"subtype"`
-	Status           string  `json:"status"`
-	DebtScheme       string  `json:"debtScheme"`
-	LoanType         string  `json:"loanType"`
-	TermMonths       int     `json:"termMonths"`
-	FirstPaymentDate *string `json:"firstPaymentDate"`
-	LinkedAssetID    *uint   `json:"linkedAssetId"`
+	Kind                string  `json:"kind"`
+	Name                string  `json:"name"`
+	Currency            string  `json:"currency"`
+	Value               float64 `json:"value"`
+	Invested            float64 `json:"invested"`
+	MonthlyIncome       float64 `json:"monthlyIncome"`
+	MonthlyPayment      float64 `json:"monthlyPayment"`
+	RatePercent         float64 `json:"ratePercent"`
+	PurchaseDate        *string `json:"purchaseDate"`
+	MaintenanceHours    float64 `json:"maintenanceHours"`
+	Subtype             string  `json:"subtype"`
+	Status              string  `json:"status"`
+	ExcludeFromNetWorth bool    `json:"excludeFromNetWorth"`
+	DebtScheme          string  `json:"debtScheme"`
+	LoanType            string  `json:"loanType"`
+	TermMonths          int     `json:"termMonths"`
+	FirstPaymentDate    *string `json:"firstPaymentDate"`
+	LinkedAssetID       *uint   `json:"linkedAssetId"`
 }
 
 type assetResp struct {
@@ -107,32 +108,43 @@ func (s *Server) overview(c echo.Context) error {
 	}
 	now := time.Now()
 
-	var totalAssets, totalLiab, totalFlow float64
+	// Displayed totals (totalAssets/totalLiab) include everything. The net-worth
+	// basis (nwAssets/nwLiab/totalFlow) and composition skip items flagged
+	// ExcludeFromNetWorth — they stay visible but don't move capital.
+	var totalAssets, totalLiab, totalFlow, nwAssets, nwLiab float64
 	byKindValue := map[model.AssetKind]float64{}
 	byKindCount := map[model.AssetKind]int{}
+	compValue := map[model.AssetKind]float64{}
 
 	for _, a := range assets {
 		m := calc.Compute(a, base, rates, now)
 		totalAssets += m.ValueBase
 		totalLiab += m.LiabilityBase
-		totalFlow += m.MonthlyFlowBase
 		byKindCount[a.Kind]++
 		if a.Kind == model.KindDebt {
 			byKindValue[a.Kind] += m.LiabilityBase
 		} else {
 			byKindValue[a.Kind] += m.ValueBase
 		}
+		if !a.ExcludeFromNetWorth {
+			nwAssets += m.ValueBase
+			nwLiab += m.LiabilityBase
+			totalFlow += m.MonthlyFlowBase
+			if a.Kind != model.KindDebt {
+				compValue[a.Kind] += m.ValueBase
+			}
+		}
 	}
 
 	comp := make([]compSlice, 0, len(assetKindOrder))
 	for _, k := range assetKindOrder {
-		v := byKindValue[k]
+		v := compValue[k]
 		if v <= 0 {
 			continue
 		}
 		pct := 0.0
-		if totalAssets > 0 {
-			pct = v / totalAssets * 100
+		if nwAssets > 0 {
+			pct = v / nwAssets * 100
 		}
 		comp = append(comp, compSlice{Kind: string(k), Label: kindLabels[k], ValueBase: round2(v), Percent: round2(pct)})
 	}
@@ -155,7 +167,7 @@ func (s *Server) overview(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, overviewResp{
 		BaseCurrency: base,
-		NetWorth:     round2(totalAssets - totalLiab),
+		NetWorth:     round2(nwAssets - nwLiab),
 		Assets:       round2(totalAssets),
 		Liabilities:  round2(totalLiab),
 		MonthlyFlow:  round2(totalFlow),
@@ -321,24 +333,25 @@ func (in assetInput) toModel(uid uint) (model.Asset, error) {
 		return model.Asset{}, echo.NewHTTPError(http.StatusBadRequest, "invalid firstPaymentDate")
 	}
 	return model.Asset{
-		UserID:           uid,
-		Kind:             kind,
-		Name:             in.Name,
-		Currency:         in.Currency,
-		Value:            in.Value,
-		Invested:         in.Invested,
-		MonthlyIncome:    in.MonthlyIncome,
-		MonthlyPayment:   in.MonthlyPayment,
-		RatePercent:      in.RatePercent,
-		PurchaseDate:     purchase,
-		MaintenanceHours: in.MaintenanceHours,
-		Subtype:          in.Subtype,
-		Status:           in.Status,
-		DebtScheme:       in.DebtScheme,
-		LoanType:         in.LoanType,
-		TermMonths:       in.TermMonths,
-		FirstPaymentDate: firstPay,
-		LinkedAssetID:    in.LinkedAssetID,
+		UserID:              uid,
+		Kind:                kind,
+		Name:                in.Name,
+		Currency:            in.Currency,
+		Value:               in.Value,
+		Invested:            in.Invested,
+		MonthlyIncome:       in.MonthlyIncome,
+		MonthlyPayment:      in.MonthlyPayment,
+		RatePercent:         in.RatePercent,
+		PurchaseDate:        purchase,
+		MaintenanceHours:    in.MaintenanceHours,
+		Subtype:             in.Subtype,
+		Status:              in.Status,
+		ExcludeFromNetWorth: in.ExcludeFromNetWorth,
+		DebtScheme:          in.DebtScheme,
+		LoanType:            in.LoanType,
+		TermMonths:          in.TermMonths,
+		FirstPaymentDate:    firstPay,
+		LinkedAssetID:       in.LinkedAssetID,
 	}, nil
 }
 

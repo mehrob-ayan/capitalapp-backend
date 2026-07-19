@@ -64,6 +64,12 @@ type Asset struct {
 	// balance (which re-anchors it to now).
 	BalanceAsOf time.Time `json:"balanceAsOf,omitempty"`
 
+	// ExcludeFromNetWorth: the item still shows in its category and in the
+	// Assets/Liabilities totals, but is left out of the Net Worth figure. Handy
+	// for consumer debts (e.g. a phone instalment) whose paying-off shouldn't
+	// swing capital when the paying account isn't tracked.
+	ExcludeFromNetWorth bool `gorm:"default:false" json:"excludeFromNetWorth"`
+
 	PurchaseDate     *time.Time `json:"purchaseDate,omitempty"`
 	MaintenanceHours float64    `json:"maintenanceHours"` // hours per year to service
 
