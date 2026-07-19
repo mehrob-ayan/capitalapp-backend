@@ -22,7 +22,7 @@ BASE=~/Ayan/capital-app
 # 2. Прод-конфиг: $BASE/server/.env
 #    ALLOW_DEV_LOGIN=false, TELEGRAM_BOT_TOKEN=..., JWT_SECRET=..., WEB_DIR=../web/dist
 
-# 3. Прописать свой туннель в $BASE/server/scripts/tunnel.sh (ngrok или cloudflared)
+# 3. Настроить туннель Tailscale Funnel (см. раздел ниже) — один раз
 
 # 4. Папки и права
 mkdir -p $BASE/logs ~/Library/LaunchAgents
@@ -36,6 +36,24 @@ launchctl load -w ~/Library/LaunchAgents/com.capitalapp.backup.plist
 ```
 
 Перед установкой останови ручной `go run` (порт 8080 должен быть свободен).
+
+## Туннель — Tailscale Funnel (разовая настройка)
+
+```bash
+brew install tailscale
+sudo tailscaled install-system-daemon      # демон tailscaled как системный сервис
+tailscale up                               # вход через браузер
+tailscale funnel 8080                      # первый запуск даст ссылку — включи Funnel в админке
+```
+
+После включения Funnel узнать публичный адрес:
+
+```bash
+tailscale funnel status        # покажет https://<машина>.<tailnet>.ts.net
+```
+
+Этот адрес — URL для Mini App в @BotFather. Дальше funnel держит наш launchd-сервис
+`com.capitalapp.tunnel` (запускает `tailscale funnel 8080` в фоне и перезапускает при сбое).
 
 ## Управление
 
