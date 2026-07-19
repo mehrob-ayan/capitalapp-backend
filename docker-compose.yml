@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: capital_pg
+    restart: unless-stopped
     environment:
       POSTGRES_USER: capital
       POSTGRES_PASSWORD: capital

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.capitalapp.backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/mehrob.latipov/Ayan/capital-app/server/scripts/backup.sh</string>
+    </array>
+
+    <!-- Runs daily at 14:00. If the laptop is asleep then, launchd runs it
+         once on the next wake-up. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>14</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/mehrob.latipov/Ayan/capital-app/logs/backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/mehrob.latipov/Ayan/capital-app/logs/backup.log</string>
+</dict>
+</plist>
