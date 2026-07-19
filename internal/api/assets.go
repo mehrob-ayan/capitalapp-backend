@@ -120,6 +120,9 @@ func (s *Server) overview(c echo.Context) error {
 		m := calc.Compute(a, base, rates, now)
 		totalAssets += m.ValueBase
 		totalLiab += m.LiabilityBase
+		// Monthly flow is real cash you move each month, so it counts every
+		// item — including debts flagged out of net worth (you still pay them).
+		totalFlow += m.MonthlyFlowBase
 		byKindCount[a.Kind]++
 		if a.Kind == model.KindDebt {
 			byKindValue[a.Kind] += m.LiabilityBase
@@ -129,7 +132,6 @@ func (s *Server) overview(c echo.Context) error {
 		if !a.ExcludeFromNetWorth {
 			nwAssets += m.ValueBase
 			nwLiab += m.LiabilityBase
-			totalFlow += m.MonthlyFlowBase
 			if a.Kind != model.KindDebt {
 				compValue[a.Kind] += m.ValueBase
 			}
