@@ -4,15 +4,21 @@ import "time"
 
 // User is a Telegram-authenticated account. All financial data hangs off it.
 type User struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	TelegramID   int64     `gorm:"uniqueIndex;not null" json:"telegramId"`
-	Username     string    `json:"username,omitempty"`
-	FirstName    string    `json:"firstName,omitempty"`
-	LastName     string    `json:"lastName,omitempty"`
-	LanguageCode string    `json:"languageCode,omitempty"`
-	BaseCurrency string    `gorm:"default:USD" json:"baseCurrency"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID           uint   `gorm:"primaryKey" json:"id"`
+	TelegramID   int64  `gorm:"uniqueIndex;not null" json:"telegramId"`
+	Username     string `json:"username,omitempty"`
+	FirstName    string `json:"firstName,omitempty"`
+	LastName     string `json:"lastName,omitempty"`
+	LanguageCode string `json:"languageCode,omitempty"`
+	BaseCurrency string `gorm:"default:USD" json:"baseCurrency"`
+
+	// AutoRates enables a daily rate fetch from an FX API; RatesSyncedAt is when
+	// it last succeeded. Off by default — manual rates are the fallback.
+	AutoRates     bool      `gorm:"default:false" json:"autoRates"`
+	RatesSyncedAt time.Time `json:"ratesSyncedAt,omitempty"`
+
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // AssetKind enumerates the categories a user sees. Debt is modelled as an asset

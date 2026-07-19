@@ -53,6 +53,7 @@ func (s *Server) catchUpUser(uid uint) {
 	if err := s.backfillSnapshots(uid); err != nil {
 		log.Printf("worker: backfill user %d: %v", uid, err)
 	}
+	s.maybeSyncRates(uid)
 }
 
 // backfillSnapshots writes a snapshot for each day from the day after the last

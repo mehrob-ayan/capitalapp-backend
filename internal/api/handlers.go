@@ -77,9 +77,10 @@ func (s *Server) me(c echo.Context) error {
 
 type updateMeRequest struct {
 	BaseCurrency string `json:"baseCurrency"`
+	AutoRates    *bool  `json:"autoRates"`
 }
 
-// updateMe currently supports changing the display base currency.
+// updateMe changes the display base currency and/or the auto-rate toggle.
 func (s *Server) updateMe(c echo.Context) error {
 	uid := c.Get(ctxUserID).(uint)
 	var req updateMeRequest
@@ -93,6 +94,18 @@ func (s *Server) updateMe(c echo.Context) error {
 		if err := s.db.Model(&model.User{}).Where("id = ?", uid).
 			Update("base_currency", req.BaseCurrency).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+		}
+	}
+	if req.AutoRates != nil {
+		if err := s.db.Model(&model.User{}).Where("id = ?", uid).
+			Update("auto_rates", *req.AutoRates).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+		}
+		// Turning it on: fetch immediately so rates update now. Non-fatal —
+		// if the API is unreachable, the toggle is still saved and manual
+		// rates stay until the next daily attempt.
+		if *req.AutoRates {
+			_ = s.syncRates(uid)
 		}
 	}
 	return s.me(c)
