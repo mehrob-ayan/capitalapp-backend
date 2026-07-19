@@ -18,6 +18,8 @@ type Config struct {
 	AllowDevLogin bool
 	CORSOrigins   string
 	WebDir        string // if set, serve the built frontend from this directory
+	TLSCert       string // if set with TLSKey, serve HTTPS
+	TLSKey        string
 }
 
 func Load() Config {
@@ -32,6 +34,8 @@ func Load() Config {
 		AllowDevLogin: getenv("ALLOW_DEV_LOGIN", "false") == "true",
 		CORSOrigins:   getenv("CORS_ORIGINS", "*"),
 		WebDir:        os.Getenv("WEB_DIR"),
+		TLSCert:       os.Getenv("TLS_CERT"),
+		TLSKey:        os.Getenv("TLS_KEY"),
 	}
 
 	if cfg.BotToken == "" && !cfg.AllowDevLogin {

@@ -6,6 +6,9 @@
 bin/
 tmp/
 
+# local TLS certificates (mkcert)
+certs/
+
 # misc
 .DS_Store
 *.log

@@ -49,12 +49,23 @@ func main() {
 	e := api.New(cfg, database)
 
 	addr := cfg.Host + ":" + cfg.Port
+	tls := cfg.TLSCert != "" && cfg.TLSKey != ""
 	go func() {
-		if err := e.Start(addr); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server: %v", err)
+		var serr error
+		if tls {
+			serr = e.StartTLS(addr, cfg.TLSCert, cfg.TLSKey)
+		} else {
+			serr = e.Start(addr)
+		}
+		if serr != nil && !errors.Is(serr, http.ErrServerClosed) {
+			log.Fatalf("server: %v", serr)
 		}
 	}()
-	log.Printf("capital-app api listening on %s", addr)
+	scheme := "http"
+	if tls {
+		scheme = "https"
+	}
+	log.Printf("capital-app api listening on %s://%s", scheme, addr)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
