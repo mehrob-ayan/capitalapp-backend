@@ -39,6 +39,7 @@ type AssetMetrics struct {
 	LiabilityBase    float64    `json:"liabilityBase"`   // debt outstanding (0 otherwise)
 	MonthlyFlowBase  float64    `json:"monthlyFlowBase"` // signed monthly cash flow
 	Profit           float64    `json:"profit"`          // value - invested (asset currency)
+	ProfitBase       float64    `json:"profitBase"`      // same, converted to base currency
 	ProfitPercent    float64    `json:"profitPercent"`
 	CashYieldPercent float64    `json:"cashYieldPercent"` // кешфлоу: income*12 / invested
 	CagrPercent      float64    `json:"cagrPercent"`      // доходность: annualised total growth
@@ -65,6 +66,7 @@ func Compute(a model.Asset, base string, r Rates, asOf time.Time) AssetMetrics {
 		m.MonthlyFlowBase = conv(a.MonthlyIncome)
 		m.Profit = a.Value - a.Invested
 		if a.Invested > 0 {
+			m.ProfitBase = conv(m.Profit)
 			m.ProfitPercent = m.Profit / a.Invested * 100
 			m.CashYieldPercent = a.MonthlyIncome * 12 / a.Invested * 100
 			m.CagrPercent = cagr(a.Invested, a.Value, a.PurchaseDate, asOf)
