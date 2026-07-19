@@ -13,6 +13,7 @@ import (
 	"capitalapp/internal/api"
 	"capitalapp/internal/config"
 	"capitalapp/internal/db"
+	"capitalapp/internal/telegrambot"
 
 	"gorm.io/gorm"
 )
@@ -44,6 +45,11 @@ func main() {
 	}
 	if err := db.Migrate(database); err != nil {
 		log.Fatalf("db migrate: %v", err)
+	}
+
+	// Household expense bot (long polling). Only starts when a token is set.
+	if cfg.BotToken != "" {
+		go telegrambot.Run(database, cfg.BotToken)
 	}
 
 	e := api.New(cfg, database)

@@ -75,6 +75,11 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 	authed.GET("/export", s.exportData)
 	authed.POST("/import", s.importData)
 
+	authed.GET("/expenses", s.expenses)
+	authed.POST("/expenses", s.createExpense)
+	authed.DELETE("/expenses/:id", s.deleteExpense)
+	authed.GET("/expenses/categories", s.expenseCategories)
+
 	authed.GET("/history", s.history)
 
 	authed.GET("/goals", s.listGoals)

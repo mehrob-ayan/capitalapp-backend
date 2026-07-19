@@ -120,6 +120,32 @@ type AssetValue struct {
 	Value   float64   `json:"value"`
 }
 
+// ExpenseCategories / IncomeCategories are the fixed lists shared by the app
+// and the Telegram bot. Order matters — the bot references categories by index.
+var ExpenseCategories = []string{
+	"Продукты", "Кафе/Кофе", "Транспорт", "Дом/Коммуналка", "Здоровье",
+	"Одежда", "Развлечения", "Дети", "Связь", "Прочее",
+}
+var IncomeCategories = []string{"Зарплата", "Подарок", "Прочее"}
+
+// Transaction is a household income/expense entry (the Monefy-style module).
+// It's a cash-flow record, separate from the net-worth (Asset) side.
+type Transaction struct {
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	UserID         uint      `gorm:"index;not null" json:"-"`
+	Date           time.Time `gorm:"index" json:"date"`
+	Type           string    `gorm:"not null" json:"type"` // "expense" | "income"
+	Category       string    `json:"category"`
+	Amount         float64   `json:"amount"`
+	Currency       string    `gorm:"not null" json:"currency"`
+	Person         string    `json:"person"` // who logged it (Telegram first name)
+	Note           string    `json:"note,omitempty"`
+	Source         string    `json:"source"`         // "bot" | "manual"
+	TelegramChatID int64     `gorm:"index" json:"-"` // for dedup
+	TelegramMsgID  int64     `json:"-"`              // for dedup
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
 // Goal is a target capital amount. Progress is computed against current net
 // worth; ETA uses the optional monthly contribution.
 type Goal struct {
