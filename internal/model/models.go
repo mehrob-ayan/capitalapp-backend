@@ -25,12 +25,13 @@ const (
 	KindDeposit    AssetKind = "deposit"
 	KindCash       AssetKind = "cash"
 	KindInvestment AssetKind = "investment"
+	KindMetals     AssetKind = "metals"
 	KindDebt       AssetKind = "debt"
 )
 
 func (k AssetKind) Valid() bool {
 	switch k {
-	case KindRealEstate, KindCar, KindDeposit, KindCash, KindInvestment, KindDebt:
+	case KindRealEstate, KindCar, KindDeposit, KindCash, KindInvestment, KindMetals, KindDebt:
 		return true
 	}
 	return false

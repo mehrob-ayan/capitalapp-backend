@@ -60,7 +60,7 @@ func Compute(a model.Asset, base string, r Rates, asOf time.Time) AssetMetrics {
 	case model.KindCash:
 		m.ValueBase = conv(a.Value)
 
-	case model.KindRealEstate, model.KindInvestment, model.KindCar:
+	case model.KindRealEstate, model.KindInvestment, model.KindCar, model.KindMetals:
 		m.ValueBase = conv(a.Value)
 		m.MonthlyFlowBase = conv(a.MonthlyIncome)
 		m.Profit = a.Value - a.Invested

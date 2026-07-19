@@ -27,6 +27,7 @@ var tracksValue = map[model.AssetKind]bool{
 	model.KindRealEstate: true,
 	model.KindCar:        true,
 	model.KindInvestment: true,
+	model.KindMetals:     true,
 }
 
 // recordAssetValue upserts today's value point for an asset. Best-effort.
