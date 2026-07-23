@@ -71,8 +71,10 @@ func (s *Server) assetHistory(c echo.Context) error {
 }
 
 type historyPoint struct {
-	Date     string  `json:"date"`
-	NetWorth float64 `json:"netWorth"`
+	Date        string  `json:"date"`
+	NetWorth    float64 `json:"netWorth"`
+	Assets      float64 `json:"assets"`
+	Liabilities float64 `json:"liabilities"`
 }
 
 type historyResp struct {
@@ -106,8 +108,10 @@ func (s *Server) history(c echo.Context) error {
 	points := make([]historyPoint, 0, len(snaps))
 	for _, sn := range snaps {
 		points = append(points, historyPoint{
-			Date:     sn.Date.Format("2006-01-02"),
-			NetWorth: round2(calc.Convert(sn.NetWorthUSD, "USD", base, rates)),
+			Date:        sn.Date.Format("2006-01-02"),
+			NetWorth:    round2(calc.Convert(sn.NetWorthUSD, "USD", base, rates)),
+			Assets:      round2(calc.Convert(sn.AssetsUSD, "USD", base, rates)),
+			Liabilities: round2(calc.Convert(sn.LiabilitiesUSD, "USD", base, rates)),
 		})
 	}
 
