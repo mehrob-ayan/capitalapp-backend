@@ -251,8 +251,19 @@ func (s *Server) createAsset(c echo.Context) error {
 	}
 	before, _ := s.netWorthUSD(uid)
 	a.BalanceAsOf = time.Now() // anchor interest accrual to now
+	// Cash is a ledger account: its balance comes from entries (add funds /
+	// withdraw), with history — the typed amount becomes the opening entry.
+	if a.Kind == model.KindCash {
+		a.IsAccount = true
+	}
 	if err := s.db.Create(&a).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+	}
+	if a.IsAccount {
+		if a.Value != 0 {
+			s.db.Create(&model.AccountEntry{UserID: uid, AccountID: a.ID, Date: time.Now(), Kind: "income", Amount: a.Value, Note: "Начальный остаток", Source: "opening"})
+		}
+		s.recomputeAccount(uid, a.ID)
 	}
 	if tracksValue[a.Kind] {
 		s.recordAssetValue(a.ID, uid, a.Value)

@@ -199,6 +199,18 @@ func bindEntry(c echo.Context, uid, accountID uint) (model.AccountEntry, error) 
 	return model.AccountEntry{UserID: uid, AccountID: accountID, Date: date, Kind: in.Kind, Amount: in.Amount, Note: in.Note}, nil
 }
 
+// debtPayments returns the payment history for a debt (entries linked to it).
+func (s *Server) debtPayments(c echo.Context) error {
+	uid := c.Get(ctxUserID).(uint)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "bad id")
+	}
+	var entries []model.AccountEntry
+	s.db.Where("user_id = ? AND linked_debt_id = ?", uid, id).Order("date desc, id desc").Find(&entries)
+	return c.JSON(http.StatusOK, entries)
+}
+
 type payInput struct {
 	Amount    float64 `json:"amount"`
 	AccountID uint    `json:"accountId"`
