@@ -17,8 +17,24 @@ type User struct {
 	AutoRates     bool      `gorm:"default:false" json:"autoRates"`
 	RatesSyncedAt time.Time `json:"ratesSyncedAt,omitempty"`
 
+	// Recurring monthly income (salary). Drives the savings-rate / efficiency
+	// view and the "monthly flow" figure. Optional — 0 means not set.
+	MonthlyIncome  float64 `json:"monthlyIncome"`
+	IncomeCurrency string  `json:"incomeCurrency,omitempty"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// RateHistory records a currency's value (1 unit in USD) on a given day, so
+// snapshots for days the machine was off can be valued at that day's rate
+// rather than today's. One row per user/currency/day.
+type RateHistory struct {
+	ID       uint      `gorm:"primaryKey" json:"-"`
+	UserID   uint      `gorm:"uniqueIndex:idx_ratehist;not null" json:"-"`
+	Currency string    `gorm:"uniqueIndex:idx_ratehist;not null" json:"currency"`
+	Date     time.Time `gorm:"uniqueIndex:idx_ratehist;not null" json:"date"`
+	PerUSD   float64   `json:"perUSD"`
 }
 
 // AssetKind enumerates the categories a user sees. Debt is modelled as an asset
@@ -97,16 +113,32 @@ type Rate struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// Snapshot records net worth on a given day, stored in USD so it stays valid
-// regardless of the user's display currency or later rate edits. One row per
-// user per day (upserted whenever the overview is computed).
+// Snapshot records net worth on a given day, stored in EACH supported currency
+// at that day's rate. Storing per-currency (not just USD, converted later)
+// keeps history honest: a portfolio of сомони assets shows a flat line in
+// сомони and the FX wobble only in USD — instead of the USD wobble leaking into
+// every currency. One row per user per day (upserted when the overview runs).
 type Snapshot struct {
-	ID             uint      `gorm:"primaryKey" json:"-"`
-	UserID         uint      `gorm:"uniqueIndex:idx_user_date;not null" json:"-"`
-	Date           time.Time `gorm:"uniqueIndex:idx_user_date;not null" json:"date"`
-	NetWorthUSD    float64   `json:"-"`
-	AssetsUSD      float64   `json:"-"`
-	LiabilitiesUSD float64   `json:"-"`
+	ID     uint      `gorm:"primaryKey" json:"-"`
+	UserID uint      `gorm:"uniqueIndex:idx_user_date;not null" json:"-"`
+	Date   time.Time `gorm:"uniqueIndex:idx_user_date;not null" json:"date"`
+
+	NetWorthUSD    float64 `json:"-"`
+	AssetsUSD      float64 `json:"-"`
+	LiabilitiesUSD float64 `json:"-"`
+
+	NetWorthTJS    float64 `json:"-"`
+	AssetsTJS      float64 `json:"-"`
+	LiabilitiesTJS float64 `json:"-"`
+
+	NetWorthUZS    float64 `json:"-"`
+	AssetsUZS      float64 `json:"-"`
+	LiabilitiesUZS float64 `json:"-"`
+
+	// CompositionUSD is a JSON map of kind → asset value in USD on that day
+	// (non-flagged assets + vested options), for the "composition over time"
+	// chart. Empty on legacy rows.
+	CompositionUSD string `json:"-"`
 }
 
 // AssetValue records the value of a single asset on a given day, so its own
@@ -144,6 +176,41 @@ type Transaction struct {
 	TelegramChatID int64     `gorm:"index" json:"-"` // for dedup
 	TelegramMsgID  int64     `json:"-"`              // for dedup
 	CreatedAt      time.Time `json:"createdAt"`
+}
+
+// Activity is one entry in the user's action log: what changed, and how net
+// worth moved as a result. NetBeforeUSD/NetAfterUSD are stored in USD (currency
+// -neutral) so the delta stays valid whatever currency the user later views in.
+// Rate changes are logged too, so "capital went up because TJS moved 9.24→9.30"
+// is visible alongside "added a debt of N".
+type Activity struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	UserID       uint      `gorm:"index;not null" json:"-"`
+	CreatedAt    time.Time `gorm:"index" json:"createdAt"`
+	Kind         string    `gorm:"not null" json:"kind"` // asset_added | asset_edited | asset_removed | option_* | rate_changed
+	Title        string    `json:"title"`                // "Добавлен долг «Ремонт»"
+	Detail       string    `json:"detail"`               // "10 000 смн" | "TJS 9.24 → 9.30"
+	Amount       float64   `json:"amount"`               // item amount in its own currency (0 if n/a)
+	Currency     string    `json:"currency"`
+	NetBeforeUSD float64   `json:"netBeforeUsd"`
+	NetAfterUSD  float64   `json:"netAfterUsd"`
+}
+
+// OptionGrant is a batch of employee stock options received on GrantDate that
+// crystallizes (fully vests, becoming real shares) VestMonths later. Value =
+// Quantity × UnitPrice. Only crystallized grants count toward net worth; grants
+// still vesting — or not yet received — are shown separately until they vest.
+type OptionGrant struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	UserID     uint      `gorm:"index;not null" json:"-"`
+	Name       string    `json:"name"`
+	Quantity   float64   `json:"quantity"`
+	UnitPrice  float64   `json:"unitPrice"`
+	Currency   string    `gorm:"not null" json:"currency"`
+	GrantDate  time.Time `json:"grantDate"`
+	VestMonths int       `json:"vestMonths"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // Goal is a target capital amount. Progress is computed against current net

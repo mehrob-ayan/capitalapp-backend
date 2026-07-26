@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"capitalapp/internal/calc"
 	"capitalapp/internal/model"
@@ -62,6 +63,8 @@ func (s *Server) updateRates(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
 	}
+	before, _ := s.netWorthUSD(uid)
+	oldR, _ := s.userRates(uid)
 	for cur, v := range req.Rates {
 		if cur == "USD" || !validCurrency[cur] {
 			continue
@@ -74,6 +77,12 @@ func (s *Server) updateRates(c echo.Context) error {
 			Assign(model.Rate{PerUSD: v}).
 			FirstOrCreate(&model.Rate{}).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+		}
+	}
+	if newR, err := s.userRates(uid); err == nil {
+		s.recordRateHistory(uid, newR, time.Now())
+		if detail := rateChangeDetail(oldR, newR); detail != "" {
+			s.logActivity(uid, "rate_changed", "Изменён курс вручную", detail, 0, "", before)
 		}
 	}
 	return s.getRates(c)

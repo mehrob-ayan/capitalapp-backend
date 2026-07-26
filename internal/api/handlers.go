@@ -76,8 +76,10 @@ func (s *Server) me(c echo.Context) error {
 }
 
 type updateMeRequest struct {
-	BaseCurrency string `json:"baseCurrency"`
-	AutoRates    *bool  `json:"autoRates"`
+	BaseCurrency   string   `json:"baseCurrency"`
+	AutoRates      *bool    `json:"autoRates"`
+	MonthlyIncome  *float64 `json:"monthlyIncome"`
+	IncomeCurrency string   `json:"incomeCurrency"`
 }
 
 // updateMe changes the display base currency and/or the auto-rate toggle.
@@ -106,6 +108,15 @@ func (s *Server) updateMe(c echo.Context) error {
 		// rates stay until the next daily attempt.
 		if *req.AutoRates {
 			_ = s.syncRates(uid)
+		}
+	}
+	if req.MonthlyIncome != nil {
+		upd := map[string]any{"monthly_income": *req.MonthlyIncome}
+		if req.IncomeCurrency != "" && validCurrency[req.IncomeCurrency] {
+			upd["income_currency"] = req.IncomeCurrency
+		}
+		if err := s.db.Model(&model.User{}).Where("id = ?", uid).Updates(upd).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 		}
 	}
 	return s.me(c)

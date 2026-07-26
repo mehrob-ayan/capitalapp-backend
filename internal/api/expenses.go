@@ -22,6 +22,12 @@ type categorySlice struct {
 	Percent  float64 `json:"percent"`
 }
 
+type monthTrend struct {
+	Month   string  `json:"month"`
+	Income  float64 `json:"income"`
+	Expense float64 `json:"expense"`
+}
+
 type expensesResp struct {
 	Month        string              `json:"month"`
 	Currency     string              `json:"currency"`
@@ -29,6 +35,7 @@ type expensesResp struct {
 	Expense      float64             `json:"expense"`
 	Balance      float64             `json:"balance"`
 	ByCategory   []categorySlice     `json:"byCategory"`
+	Trend        []monthTrend        `json:"trend"`
 	People       []string            `json:"people"`
 	Transactions []model.Transaction `json:"transactions"`
 }
@@ -92,6 +99,7 @@ func (s *Server) expenses(c echo.Context) error {
 		Expense:      round2(expense),
 		Balance:      round2(income - expense),
 		ByCategory:   cats,
+		Trend:        s.monthlyTrend(uid, start, end),
 		People:       people,
 		Transactions: txs,
 	})
@@ -153,6 +161,38 @@ func (s *Server) deleteExpense(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// monthlyTrend sums income/expense for the six months ending at the viewed one
+// (raw amounts — the household module is single-currency). Feeds the trend chart.
+func (s *Server) monthlyTrend(uid uint, viewedStart, viewedEnd time.Time) []monthTrend {
+	trendStart := viewedStart.AddDate(0, -5, 0)
+	var txs []model.Transaction
+	s.db.Where("user_id = ? AND date >= ? AND date < ?", uid, trendStart, viewedEnd).Find(&txs)
+
+	idx := map[string]int{}
+	out := make([]monthTrend, 6)
+	for i := 0; i < 6; i++ {
+		mo := trendStart.AddDate(0, i, 0).Format("2006-01")
+		out[i] = monthTrend{Month: mo}
+		idx[mo] = i
+	}
+	for _, t := range txs {
+		i, ok := idx[t.Date.Format("2006-01")]
+		if !ok {
+			continue
+		}
+		if t.Type == "income" {
+			out[i].Income += t.Amount
+		} else {
+			out[i].Expense += t.Amount
+		}
+	}
+	for i := range out {
+		out[i].Income = round2(out[i].Income)
+		out[i].Expense = round2(out[i].Expense)
+	}
+	return out
 }
 
 func monthStart(param string) time.Time {

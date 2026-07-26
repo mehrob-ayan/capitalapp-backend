@@ -13,12 +13,13 @@ import (
 // exportPayload is the full, portable snapshot of a user's data. Snapshots and
 // per-asset history are derived, so they're left out — they rebuild themselves.
 type exportPayload struct {
-	Version      int                `json:"version"`
-	ExportedAt   time.Time          `json:"exportedAt"`
-	BaseCurrency string             `json:"baseCurrency"`
-	Rates        map[string]float64 `json:"rates"`
-	Assets       []model.Asset      `json:"assets"`
-	Goals        []model.Goal       `json:"goals"`
+	Version      int                 `json:"version"`
+	ExportedAt   time.Time           `json:"exportedAt"`
+	BaseCurrency string              `json:"baseCurrency"`
+	Rates        map[string]float64  `json:"rates"`
+	Assets       []model.Asset       `json:"assets"`
+	Goals        []model.Goal        `json:"goals"`
+	Options      []model.OptionGrant `json:"options"`
 }
 
 func (s *Server) exportData(c echo.Context) error {
@@ -33,8 +34,10 @@ func (s *Server) exportData(c echo.Context) error {
 	}
 	var assets []model.Asset
 	var goals []model.Goal
+	var options []model.OptionGrant
 	s.db.Where("user_id = ?", uid).Order("id").Find(&assets)
 	s.db.Where("user_id = ?", uid).Order("id").Find(&goals)
+	s.db.Where("user_id = ?", uid).Order("id").Find(&options)
 
 	return c.JSON(http.StatusOK, exportPayload{
 		Version:      1,
@@ -43,6 +46,7 @@ func (s *Server) exportData(c echo.Context) error {
 		Rates:        rates,
 		Assets:       assets,
 		Goals:        goals,
+		Options:      options,
 	})
 }
 
@@ -56,7 +60,7 @@ func (s *Server) importData(c echo.Context) error {
 	}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		for _, m := range []any{&model.Asset{}, &model.Goal{}, &model.Rate{}, &model.Snapshot{}, &model.AssetValue{}} {
+		for _, m := range []any{&model.Asset{}, &model.Goal{}, &model.Rate{}, &model.Snapshot{}, &model.AssetValue{}, &model.OptionGrant{}} {
 			if err := tx.Where("user_id = ?", uid).Delete(m).Error; err != nil {
 				return err
 			}
@@ -80,6 +84,15 @@ func (s *Server) importData(c echo.Context) error {
 			g.ID = 0
 			g.UserID = uid
 			if err := tx.Create(&g).Error; err != nil {
+				return err
+			}
+		}
+
+		for i := range in.Options {
+			o := in.Options[i]
+			o.ID = 0
+			o.UserID = uid
+			if err := tx.Create(&o).Error; err != nil {
 				return err
 			}
 		}
@@ -116,5 +129,5 @@ func (s *Server) importData(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "assets": len(in.Assets), "goals": len(in.Goals)})
+	return c.JSON(http.StatusOK, echo.Map{"status": "ok", "assets": len(in.Assets), "goals": len(in.Goals), "options": len(in.Options)})
 }

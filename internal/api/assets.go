@@ -34,6 +34,10 @@ var assetKindOrder = []model.AssetKind{
 
 var validCurrency = map[string]bool{"USD": true, "TJS": true, "UZS": true}
 
+// currencyList is the ordered set of supported currencies (snapshots store net
+// worth in each). USD first — it's the fallback for legacy rows.
+var currencyList = []string{"USD", "TJS", "UZS"}
+
 // ---- request/response DTOs ----
 
 type assetInput struct {
@@ -78,13 +82,15 @@ type categorySummary struct {
 }
 
 type overviewResp struct {
-	BaseCurrency string            `json:"baseCurrency"`
-	NetWorth     float64           `json:"netWorth"`
-	Assets       float64           `json:"assets"`
-	Liabilities  float64           `json:"liabilities"`
-	MonthlyFlow  float64           `json:"monthlyFlow"`
-	Composition  []compSlice       `json:"composition"`
-	Categories   []categorySummary `json:"categories"`
+	BaseCurrency  string            `json:"baseCurrency"`
+	NetWorth      float64           `json:"netWorth"`
+	Assets        float64           `json:"assets"`
+	Liabilities   float64           `json:"liabilities"`
+	MonthlyFlow   float64           `json:"monthlyFlow"`
+	Options       float64           `json:"options"`
+	OptionsVested float64           `json:"optionsVested"`
+	Composition   []compSlice       `json:"composition"`
+	Categories    []categorySummary `json:"categories"`
 }
 
 // ---- handlers ----
@@ -138,7 +144,24 @@ func (s *Server) overview(c echo.Context) error {
 		}
 	}
 
-	comp := make([]compSlice, 0, len(assetKindOrder))
+	// Crystallized options are real shares now — fold them into assets and net
+	// worth. Vesting/pending grants live only in the Options module until vested.
+	vestedOptRaw, vestedOptCount := s.vestedOptions(uid, base, rates, now)
+	vestedOptBase := round2(vestedOptRaw)
+	totalAssets += vestedOptBase
+	nwAssets += vestedOptBase
+
+	// Monthly income (salary) is real inflow — fold it into the monthly flow so
+	// "поток" is доход − расходы/платежи, not just payments.
+	if user.MonthlyIncome > 0 {
+		ic := user.IncomeCurrency
+		if ic == "" {
+			ic = base
+		}
+		totalFlow += calc.Convert(user.MonthlyIncome, ic, base, rates)
+	}
+
+	comp := make([]compSlice, 0, len(assetKindOrder)+1)
 	for _, k := range assetKindOrder {
 		v := compValue[k]
 		if v <= 0 {
@@ -150,8 +173,15 @@ func (s *Server) overview(c echo.Context) error {
 		}
 		comp = append(comp, compSlice{Kind: string(k), Label: kindLabels[k], ValueBase: round2(v), Percent: round2(pct)})
 	}
+	if vestedOptBase > 0 {
+		pct := 0.0
+		if nwAssets > 0 {
+			pct = vestedOptBase / nwAssets * 100
+		}
+		comp = append(comp, compSlice{Kind: "options", Label: "Опционы", ValueBase: vestedOptBase, Percent: round2(pct)})
+	}
 
-	cats := make([]categorySummary, 0, len(kindOrder))
+	cats := make([]categorySummary, 0, len(kindOrder)+1)
 	for _, k := range kindOrder {
 		if byKindCount[k] == 0 {
 			continue
@@ -162,19 +192,24 @@ func (s *Server) overview(c echo.Context) error {
 			IsLiability: k == model.KindDebt,
 		})
 	}
+	if vestedOptCount > 0 {
+		cats = append(cats, categorySummary{Kind: "options", Label: "Опционы", SubtotalBase: vestedOptBase, Count: vestedOptCount, IsLiability: false})
+	}
 
 	// Opening the overview also catches up any snapshots missed while the
 	// machine was asleep/off (idempotent).
 	_ = s.backfillSnapshots(uid)
 
 	return c.JSON(http.StatusOK, overviewResp{
-		BaseCurrency: base,
-		NetWorth:     round2(nwAssets - nwLiab),
-		Assets:       round2(totalAssets),
-		Liabilities:  round2(totalLiab),
-		MonthlyFlow:  round2(totalFlow),
-		Composition:  comp,
-		Categories:   cats,
+		BaseCurrency:  base,
+		NetWorth:      round2(nwAssets - nwLiab),
+		Assets:        round2(totalAssets),
+		Liabilities:   round2(totalLiab),
+		MonthlyFlow:   round2(totalFlow),
+		Options:       s.optionsTotalBase(uid, base, rates),
+		OptionsVested: vestedOptBase,
+		Composition:   comp,
+		Categories:    cats,
 	})
 }
 
@@ -214,6 +249,7 @@ func (s *Server) createAsset(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+	before, _ := s.netWorthUSD(uid)
 	a.BalanceAsOf = time.Now() // anchor interest accrual to now
 	if err := s.db.Create(&a).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -221,6 +257,11 @@ func (s *Server) createAsset(c echo.Context) error {
 	if tracksValue[a.Kind] {
 		s.recordAssetValue(a.ID, uid, a.Value)
 	}
+	addDetail := fmtAmount(a.Value, a.Currency)
+	if a.ExcludeFromNetWorth {
+		addDetail += " · вне капитала"
+	}
+	s.logActivity(uid, "asset_added", assetActivityTitle("Добавлено", a), addDetail, a.Value, a.Currency, before)
 	rates, err := s.userRates(uid)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -266,12 +307,14 @@ func (s *Server) updateAsset(c echo.Context) error {
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
 	updated.BalanceAsOf = time.Now() // re-anchor: the entered balance is current as of now
+	before, _ := s.netWorthUSD(uid)
 	if err := s.db.Save(&updated).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
 	if tracksValue[updated.Kind] {
 		s.recordAssetValue(updated.ID, uid, updated.Value)
 	}
+	s.logActivity(uid, "asset_edited", assetActivityTitle("Изменено", updated), assetEditDetail(existing, updated), updated.Value, updated.Currency, before)
 	rates, err := s.userRates(uid)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -285,10 +328,12 @@ func (s *Server) deleteAsset(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "asset not found")
 	}
+	before, _ := s.netWorthUSD(uid)
 	if err := s.db.Delete(&model.Asset{}, a.ID).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
 	s.db.Where("asset_id = ?", a.ID).Delete(&model.AssetValue{})
+	s.logActivity(uid, "asset_removed", assetActivityTitle("Удалено", a), fmtAmount(a.Value, a.Currency), a.Value, a.Currency, before)
 	return c.NoContent(http.StatusNoContent)
 }
 

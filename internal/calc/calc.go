@@ -36,6 +36,7 @@ func Convert(amount float64, from, to string, r Rates) float64 {
 // feed aggregation; the per-asset percentages feed the position screen.
 type AssetMetrics struct {
 	ValueBase        float64    `json:"valueBase"`       // asset contribution (0 for debt)
+	AccruedValue     float64    `json:"accruedValue"`    // current value in the asset's OWN currency (deposits accrue; others = entered value)
 	LiabilityBase    float64    `json:"liabilityBase"`   // debt outstanding (0 otherwise)
 	MonthlyFlowBase  float64    `json:"monthlyFlowBase"` // signed monthly cash flow
 	Profit           float64    `json:"profit"`          // value - invested (asset currency)
@@ -49,13 +50,15 @@ type AssetMetrics struct {
 // Compute derives metrics for one asset in the given base currency, as of asOf.
 func Compute(a model.Asset, base string, r Rates, asOf time.Time) AssetMetrics {
 	conv := func(v float64) float64 { return Convert(v, a.Currency, base, r) }
-	m := AssetMetrics{}
+	m := AssetMetrics{AccruedValue: a.Value}
 
 	switch a.Kind {
 	case model.KindDeposit:
 		// Interest compounds into the balance (капитализация): the deposit grows
 		// daily, so the yield shows up as value growth rather than separate flow.
-		m.ValueBase = conv(AccrueBalance(a.Value, a.RatePercent, a.BalanceAsOf, asOf))
+		accrued := AccrueBalance(a.Value, a.RatePercent, a.BalanceAsOf, asOf)
+		m.AccruedValue = accrued
+		m.ValueBase = conv(accrued)
 		m.CashYieldPercent = a.RatePercent
 
 	case model.KindCash:

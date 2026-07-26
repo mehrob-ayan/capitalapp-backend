@@ -24,5 +24,8 @@ func Migrate(db *gorm.DB) error {
 		&model.Goal{},
 		&model.AssetValue{},
 		&model.Transaction{},
+		&model.OptionGrant{},
+		&model.Activity{},
+		&model.RateHistory{},
 	)
 }

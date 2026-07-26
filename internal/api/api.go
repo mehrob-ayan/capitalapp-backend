@@ -81,11 +81,22 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 	authed.GET("/expenses/categories", s.expenseCategories)
 
 	authed.GET("/history", s.history)
+	authed.GET("/history/composition", s.composition)
+	authed.PATCH("/history/:date", s.patchSnapshot)
+	authed.DELETE("/history/:date", s.deleteSnapshot)
+	authed.GET("/efficiency", s.efficiency)
 
 	authed.GET("/goals", s.listGoals)
 	authed.POST("/goals", s.createGoal)
 	authed.PATCH("/goals/:id", s.updateGoal)
 	authed.DELETE("/goals/:id", s.deleteGoal)
+
+	authed.GET("/activity", s.listActivity)
+
+	authed.GET("/options", s.listOptions)
+	authed.POST("/options", s.createOption)
+	authed.PATCH("/options/:id", s.updateOption)
+	authed.DELETE("/options/:id", s.deleteOption)
 
 	// Catch-up worker: backfills history snapshots missed while the machine
 	// was asleep/off. Runs on startup and hourly.

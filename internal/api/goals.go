@@ -17,7 +17,7 @@ func (s *Server) netWorthUSD(uid uint) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	assets, liab, err := s.totalsAsOf(uid, rates, time.Now())
+	assets, liab, err := s.totalsAsOf(uid, "USD", rates, time.Now())
 	return assets - liab, err
 }
 
