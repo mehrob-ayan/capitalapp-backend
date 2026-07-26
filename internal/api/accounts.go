@@ -94,6 +94,40 @@ func (s *Server) createAccount(c echo.Context) error {
 	return c.JSON(http.StatusCreated, s.accountRow(a, user.SalaryAccountID))
 }
 
+// deleteAccount removes a ledger account. It first undoes any debt payments made
+// from it (restoring the debts), then deletes the account's entries and the
+// account itself — so removing an account leaves no trace.
+func (s *Server) deleteAccount(c echo.Context) error {
+	uid := c.Get(ctxUserID).(uint)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "bad id")
+	}
+	var acc model.Asset
+	if err := s.db.Where("id = ? AND user_id = ? AND is_account = ?", id, uid, true).First(&acc).Error; err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "account not found")
+	}
+	var pays []model.AccountEntry
+	s.db.Where("user_id = ? AND account_id = ? AND source = ?", uid, id, "debt_payment").Find(&pays)
+	for _, e := range pays {
+		if e.LinkedDebtID == nil {
+			continue
+		}
+		restore := e.DebtAmount
+		if restore <= 0 {
+			restore = e.Amount
+		}
+		s.db.Model(&model.Asset{}).Where("id = ? AND user_id = ?", *e.LinkedDebtID, uid).
+			Update("value", gorm.Expr("value + ?", restore))
+	}
+	s.db.Where("user_id = ? AND account_id = ?", uid, id).Delete(&model.AccountEntry{})
+	s.db.Where("id = ? AND user_id = ?", id, uid).Delete(&model.Asset{})
+	// If it was the salary account, turn off auto-salary.
+	s.db.Model(&model.User{}).Where("id = ? AND salary_account_id = ?", uid, id).
+		Updates(map[string]any{"salary_account_id": nil})
+	return c.NoContent(http.StatusNoContent)
+}
+
 type entriesResp struct {
 	Account accountResp          `json:"account"`
 	Entries []model.AccountEntry `json:"entries"`

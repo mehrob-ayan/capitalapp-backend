@@ -95,6 +95,7 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 
 	authed.GET("/accounts", s.listAccounts)
 	authed.POST("/accounts", s.createAccount)
+	authed.DELETE("/accounts/:id", s.deleteAccount)
 	authed.GET("/accounts/:id/entries", s.accountEntries)
 	authed.POST("/accounts/:id/entries", s.addEntry)
 	authed.PATCH("/entries/:id", s.updateEntry)
