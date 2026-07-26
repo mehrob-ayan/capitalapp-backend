@@ -171,15 +171,20 @@ func (s *Server) deleteEntry(c echo.Context) error {
 	// Deleting a debt payment gives the money back to the debt too (converting
 	// the account-currency amount back to the debt's currency).
 	if e.Source == "debt_payment" && e.LinkedDebtID != nil {
-		var debt, acc model.Asset
-		if s.db.Where("id = ? AND user_id = ?", *e.LinkedDebtID, uid).First(&debt).Error == nil {
-			restore := e.Amount
-			if s.db.Where("id = ? AND user_id = ?", e.AccountID, uid).First(&acc).Error == nil && acc.Currency != debt.Currency {
-				rates, _ := s.userRates(uid)
-				restore = round2(calc.Convert(e.Amount, acc.Currency, debt.Currency, rates))
+		// Prefer the stored debt-currency amount (exact); fall back to converting
+		// the account amount for older entries that predate DebtAmount.
+		restore := e.DebtAmount
+		if restore <= 0 {
+			var debt, acc model.Asset
+			if s.db.Where("id = ? AND user_id = ?", *e.LinkedDebtID, uid).First(&debt).Error == nil {
+				restore = e.Amount
+				if s.db.Where("id = ? AND user_id = ?", e.AccountID, uid).First(&acc).Error == nil && acc.Currency != debt.Currency {
+					rates, _ := s.userRates(uid)
+					restore = round2(calc.Convert(e.Amount, acc.Currency, debt.Currency, rates))
+				}
 			}
-			s.db.Model(&model.Asset{}).Where("id = ?", debt.ID).Update("value", gorm.Expr("value + ?", restore))
 		}
+		s.db.Model(&model.Asset{}).Where("id = ? AND user_id = ?", *e.LinkedDebtID, uid).Update("value", gorm.Expr("value + ?", restore))
 	}
 	if err := s.db.Delete(&model.AccountEntry{}, e.ID).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -286,7 +291,7 @@ func (s *Server) payDebt(c echo.Context) error {
 	}
 	s.db.Create(&model.AccountEntry{
 		UserID: uid, AccountID: acc.ID, Date: date, Kind: "payment", Amount: debit,
-		Note: note, Source: "debt_payment", LinkedDebtID: &did,
+		Note: note, Source: "debt_payment", LinkedDebtID: &did, DebtAmount: in.Amount,
 	})
 	s.recomputeAccount(uid, acc.ID)
 

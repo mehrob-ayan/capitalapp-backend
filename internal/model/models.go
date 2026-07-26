@@ -221,6 +221,7 @@ type AccountEntry struct {
 	Note         string    `json:"note"`
 	Source       string    `json:"source"`                 // opening | salary_auto | manual | debt_payment
 	LinkedDebtID *uint     `json:"linkedDebtId,omitempty"` // set for debt payments
+	DebtAmount   float64   `json:"debtAmount,omitempty"`   // debt payment: amount in the debt's own currency
 	PayKey       string    `gorm:"index" json:"-"`         // idempotency key for auto-salary (e.g. "2026-08-adv")
 	CreatedAt    time.Time `json:"createdAt"`
 }
