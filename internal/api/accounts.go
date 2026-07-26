@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"capitalapp/internal/calc"
 	"capitalapp/internal/model"
 
 	"github.com/labstack/echo/v4"
@@ -167,10 +168,18 @@ func (s *Server) deleteEntry(c echo.Context) error {
 	if err := s.db.Where("id = ? AND user_id = ?", c.Param("id"), uid).First(&e).Error; err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "entry not found")
 	}
-	// Deleting a debt payment gives the money back to the debt too.
+	// Deleting a debt payment gives the money back to the debt too (converting
+	// the account-currency amount back to the debt's currency).
 	if e.Source == "debt_payment" && e.LinkedDebtID != nil {
-		s.db.Model(&model.Asset{}).Where("id = ? AND user_id = ?", *e.LinkedDebtID, uid).
-			Update("value", gorm.Expr("value + ?", e.Amount))
+		var debt, acc model.Asset
+		if s.db.Where("id = ? AND user_id = ?", *e.LinkedDebtID, uid).First(&debt).Error == nil {
+			restore := e.Amount
+			if s.db.Where("id = ? AND user_id = ?", e.AccountID, uid).First(&acc).Error == nil && acc.Currency != debt.Currency {
+				rates, _ := s.userRates(uid)
+				restore = round2(calc.Convert(e.Amount, acc.Currency, debt.Currency, rates))
+			}
+			s.db.Model(&model.Asset{}).Where("id = ?", debt.ID).Update("value", gorm.Expr("value + ?", restore))
+		}
 	}
 	if err := s.db.Delete(&model.AccountEntry{}, e.ID).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -245,7 +254,13 @@ func (s *Server) payDebt(c echo.Context) error {
 	}
 	before, _ := s.netWorthUSD(uid)
 
-	// Reduce the debt balance and re-anchor accrual to now.
+	// The entered amount is in the debt's currency. When the paying account is in
+	// a different currency, the account is debited the converted amount so both
+	// sides stay honest (e.g. paying a сомони mortgage from a сумы account).
+	rates, _ := s.userRates(uid)
+	debit := round2(calc.Convert(in.Amount, debt.Currency, acc.Currency, rates))
+
+	// Reduce the debt balance (in its own currency) and re-anchor accrual to now.
 	newBal := debt.Value - in.Amount
 	if newBal < 0 {
 		newBal = 0
@@ -254,11 +269,15 @@ func (s *Server) payDebt(c echo.Context) error {
 	debt.BalanceAsOf = time.Now()
 	s.db.Save(&debt)
 
-	// Money leaves the account.
+	// Money leaves the account (in the account's currency).
 	did := debt.ID
+	note := "Платёж: " + debt.Name
+	if debt.Currency != acc.Currency {
+		note += " (" + fmtAmount(in.Amount, debt.Currency) + ")"
+	}
 	s.db.Create(&model.AccountEntry{
-		UserID: uid, AccountID: acc.ID, Date: date, Kind: "payment", Amount: in.Amount,
-		Note: "Платёж: " + debt.Name, Source: "debt_payment", LinkedDebtID: &did,
+		UserID: uid, AccountID: acc.ID, Date: date, Kind: "payment", Amount: debit,
+		Note: note, Source: "debt_payment", LinkedDebtID: &did,
 	})
 	s.recomputeAccount(uid, acc.ID)
 
