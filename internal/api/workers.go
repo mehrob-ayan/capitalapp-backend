@@ -155,9 +155,8 @@ func (s *Server) totalsAsOf(uid uint, base string, rates calc.Rates, asOf time.T
 		return 0, 0, err
 	}
 	for _, a := range list {
-		if a.ExcludeFromNetWorth {
-			continue // shown in totals, but out of net worth (history/goals)
-		}
+		// Double-entry: every debt is funded from a tracked account, so all debts
+		// count in net worth now (the ExcludeFromNetWorth hack is retired).
 		m := calc.Compute(a, base, rates, asOf)
 		assets += m.ValueBase
 		liab += m.LiabilityBase

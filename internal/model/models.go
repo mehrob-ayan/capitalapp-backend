@@ -22,6 +22,10 @@ type User struct {
 	MonthlyIncome  float64 `json:"monthlyIncome"`
 	IncomeCurrency string  `json:"incomeCurrency,omitempty"`
 
+	// SalaryAccountID is the ledger account that receives auto-posted salary
+	// (advance + remainder). nil = auto-salary off.
+	SalaryAccountID *uint `json:"salaryAccountId,omitempty"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -85,6 +89,10 @@ type Asset struct {
 	// for consumer debts (e.g. a phone instalment) whose paying-off shouldn't
 	// swing capital when the paying account isn't tracked.
 	ExcludeFromNetWorth bool `gorm:"default:false" json:"excludeFromNetWorth"`
+
+	// IsAccount marks a cash asset as a ledger account: its balance (Value) is
+	// the sum of its AccountEntries (salary in, payments out), not typed directly.
+	IsAccount bool `gorm:"default:false" json:"isAccount"`
 
 	PurchaseDate     *time.Time `json:"purchaseDate,omitempty"`
 	MaintenanceHours float64    `json:"maintenanceHours"` // hours per year to service
@@ -194,6 +202,23 @@ type Activity struct {
 	Currency     string    `json:"currency"`
 	NetBeforeUSD float64   `json:"netBeforeUsd"`
 	NetAfterUSD  float64   `json:"netAfterUsd"`
+}
+
+// AccountEntry is one movement on a ledger account: income in (+) or payment /
+// withdrawal out (−). The account's balance is the sum of its entries, so any
+// entry can be added, edited or deleted and the balance stays consistent.
+type AccountEntry struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	UserID       uint      `gorm:"index;not null" json:"-"`
+	AccountID    uint      `gorm:"index;not null" json:"accountId"`
+	Date         time.Time `gorm:"index" json:"date"`
+	Kind         string    `gorm:"not null" json:"kind"` // "income" | "payment"
+	Amount       float64   `json:"amount"`               // always positive; Kind gives the sign
+	Note         string    `json:"note"`
+	Source       string    `json:"source"`                 // opening | salary_auto | manual | debt_payment
+	LinkedDebtID *uint     `json:"linkedDebtId,omitempty"` // set for debt payments
+	PayKey       string    `gorm:"index" json:"-"`         // idempotency key for auto-salary (e.g. "2026-08-adv")
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 // OptionGrant is a batch of employee stock options received on GrantDate that

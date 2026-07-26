@@ -135,12 +135,12 @@ func (s *Server) overview(c echo.Context) error {
 		} else {
 			byKindValue[a.Kind] += m.ValueBase
 		}
-		if !a.ExcludeFromNetWorth {
-			nwAssets += m.ValueBase
-			nwLiab += m.LiabilityBase
-			if a.Kind != model.KindDebt {
-				compValue[a.Kind] += m.ValueBase
-			}
+		// All items count in net worth now (double-entry: debts are funded from a
+		// tracked account, so no more ExcludeFromNetWorth exclusion).
+		nwAssets += m.ValueBase
+		nwLiab += m.LiabilityBase
+		if a.Kind != model.KindDebt {
+			compValue[a.Kind] += m.ValueBase
 		}
 	}
 

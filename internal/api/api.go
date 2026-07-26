@@ -93,6 +93,14 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 
 	authed.GET("/activity", s.listActivity)
 
+	authed.GET("/accounts", s.listAccounts)
+	authed.POST("/accounts", s.createAccount)
+	authed.GET("/accounts/:id/entries", s.accountEntries)
+	authed.POST("/accounts/:id/entries", s.addEntry)
+	authed.PATCH("/entries/:id", s.updateEntry)
+	authed.DELETE("/entries/:id", s.deleteEntry)
+	authed.POST("/debts/:id/pay", s.payDebt)
+
 	authed.GET("/options", s.listOptions)
 	authed.POST("/options", s.createOption)
 	authed.PATCH("/options/:id", s.updateOption)

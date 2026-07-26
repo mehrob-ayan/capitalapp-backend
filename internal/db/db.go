@@ -27,5 +27,6 @@ func Migrate(db *gorm.DB) error {
 		&model.OptionGrant{},
 		&model.Activity{},
 		&model.RateHistory{},
+		&model.AccountEntry{},
 	)
 }
