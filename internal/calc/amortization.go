@@ -115,6 +115,21 @@ func Amortize(principal, annualRatePct float64, term int, lt LoanType, firstPaym
 	}
 }
 
+// AnnuityPayment is the equal monthly payment that amortizes `balance` over `n`
+// months at the given annual rate. Used to recompute a loan's payment after an
+// early repayment while keeping the payoff date fixed (bank-style).
+func AnnuityPayment(balance, annualRatePct float64, n int) float64 {
+	if balance <= 0 || n <= 0 {
+		return 0
+	}
+	i := annualRatePct / 100 / 12
+	if i == 0 {
+		return balance / float64(n)
+	}
+	pow := math.Pow(1+i, float64(n))
+	return balance * i * pow / (pow - 1)
+}
+
 // AccrueBalance grows a debt balance by daily-compounded interest from `from`
 // to `asOf`. This mirrors how a bank accrues interest each day on the amount
 // owed. With no rate, no anchor date, or a future anchor, the balance is

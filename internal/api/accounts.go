@@ -267,6 +267,15 @@ func (s *Server) payDebt(c echo.Context) error {
 	}
 	debt.Value = round2(newBal)
 	debt.BalanceAsOf = time.Now()
+	// Bank-style: keep the payoff date, recompute the monthly payment for the new
+	// balance over the months remaining until it.
+	if debt.PayoffDate != nil && debt.RatePercent > 0 {
+		now := time.Now()
+		n := (debt.PayoffDate.Year()-now.Year())*12 + int(debt.PayoffDate.Month()) - int(now.Month())
+		if n >= 1 {
+			debt.MonthlyPayment = round2(calc.AnnuityPayment(debt.Value, debt.RatePercent, n))
+		}
+	}
 	s.db.Save(&debt)
 
 	// Money leaves the account (in the account's currency).

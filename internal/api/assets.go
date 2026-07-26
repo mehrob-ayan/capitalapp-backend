@@ -58,6 +58,7 @@ type assetInput struct {
 	LoanType            string  `json:"loanType"`
 	TermMonths          int     `json:"termMonths"`
 	FirstPaymentDate    *string `json:"firstPaymentDate"`
+	PayoffDate          *string `json:"payoffDate"`
 	LinkedAssetID       *uint   `json:"linkedAssetId"`
 }
 
@@ -390,6 +391,10 @@ func (in assetInput) toModel(uid uint) (model.Asset, error) {
 	if err != nil {
 		return model.Asset{}, echo.NewHTTPError(http.StatusBadRequest, "invalid firstPaymentDate")
 	}
+	payoff, err := parseDate(in.PayoffDate)
+	if err != nil {
+		return model.Asset{}, echo.NewHTTPError(http.StatusBadRequest, "invalid payoffDate")
+	}
 	return model.Asset{
 		UserID:              uid,
 		Kind:                kind,
@@ -409,6 +414,7 @@ func (in assetInput) toModel(uid uint) (model.Asset, error) {
 		LoanType:            in.LoanType,
 		TermMonths:          in.TermMonths,
 		FirstPaymentDate:    firstPay,
+		PayoffDate:          payoff,
 		LinkedAssetID:       in.LinkedAssetID,
 	}, nil
 }

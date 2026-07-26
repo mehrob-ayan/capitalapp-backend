@@ -104,7 +104,11 @@ type Asset struct {
 	LoanType         string     `json:"loanType,omitempty"`   // legacy; superseded by DebtScheme
 	TermMonths       int        `json:"termMonths,omitempty"`
 	FirstPaymentDate *time.Time `json:"firstPaymentDate,omitempty"`
-	LinkedAssetID    *uint      `json:"linkedAssetId,omitempty"`
+	// PayoffDate is the loan's fixed end date. When set, a payment recomputes the
+	// monthly payment to amortize the remaining balance to this date — the bank's
+	// "keep the term, lower the payment" behaviour on early repayment.
+	PayoffDate    *time.Time `json:"payoffDate,omitempty"`
+	LinkedAssetID *uint      `json:"linkedAssetId,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
