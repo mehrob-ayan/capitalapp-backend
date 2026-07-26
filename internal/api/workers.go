@@ -55,6 +55,7 @@ func (s *Server) catchUpUser(uid uint) {
 		log.Printf("worker: backfill user %d: %v", uid, err)
 	}
 	s.maybeSyncRates(uid)
+	s.postSalary(uid)
 }
 
 // backfillSnapshots writes a snapshot for each day from the day after the last
