@@ -1,6 +1,7 @@
 package api
 
 import (
+	"math"
 	"net/http"
 	"time"
 
@@ -71,6 +72,12 @@ func (s *Server) updateRates(c echo.Context) error {
 		}
 		if v <= 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, "rate must be positive")
+		}
+		// Skip a currency whose rate didn't meaningfully change (≤0.1%). The input
+		// field rounds the rate for display, so re-saving it would otherwise nudge
+		// the stored value and re-value large FX-denominated balances for nothing.
+		if old := oldR[cur]; old > 0 && math.Abs(v-old)/old < 0.001 {
+			continue
 		}
 		if err := s.db.
 			Where(model.Rate{UserID: uid, Currency: cur}).
