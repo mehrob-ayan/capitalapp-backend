@@ -53,11 +53,12 @@ const (
 	KindInvestment AssetKind = "investment"
 	KindMetals     AssetKind = "metals"
 	KindDebt       AssetKind = "debt"
+	KindLent       AssetKind = "lent" // money you lent out — a receivable (asset)
 )
 
 func (k AssetKind) Valid() bool {
 	switch k {
-	case KindRealEstate, KindCar, KindDeposit, KindCash, KindInvestment, KindMetals, KindDebt:
+	case KindRealEstate, KindCar, KindDeposit, KindCash, KindInvestment, KindMetals, KindDebt, KindLent:
 		return true
 	}
 	return false

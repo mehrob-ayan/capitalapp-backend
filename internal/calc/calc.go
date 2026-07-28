@@ -64,6 +64,12 @@ func Compute(a model.Asset, base string, r Rates, asOf time.Time) AssetMetrics {
 	case model.KindCash:
 		m.ValueBase = conv(a.Value)
 
+	case model.KindLent:
+		// Money lent out — a receivable. Counts as an asset; the balance falls as
+		// it's repaid (money comes back into an account).
+		m.ValueBase = conv(a.Value)
+		m.AccruedValue = a.Value
+
 	case model.KindRealEstate, model.KindInvestment, model.KindCar, model.KindMetals:
 		m.ValueBase = conv(a.Value)
 		m.MonthlyFlowBase = conv(a.MonthlyIncome)

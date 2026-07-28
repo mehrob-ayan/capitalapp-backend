@@ -202,9 +202,9 @@ func (s *Server) deleteEntry(c echo.Context) error {
 	if err := s.db.Where("id = ? AND user_id = ?", c.Param("id"), uid).First(&e).Error; err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "entry not found")
 	}
-	// Deleting a debt payment gives the money back to the debt too (converting
-	// the account-currency amount back to the debt's currency).
-	if e.Source == "debt_payment" && e.LinkedDebtID != nil {
+	// Deleting a debt payment (or a lent repayment) restores the linked asset's
+	// balance — the exact debt-currency amount, converting for older entries.
+	if (e.Source == "debt_payment" || e.Source == "lent_repayment") && e.LinkedDebtID != nil {
 		// Prefer the stored debt-currency amount (exact); fall back to converting
 		// the account amount for older entries that predate DebtAmount.
 		restore := e.DebtAmount
@@ -331,6 +331,59 @@ func (s *Server) payDebt(c echo.Context) error {
 
 	s.logActivity(uid, "debt_payment", "Платёж по долгу «"+debt.Name+"»",
 		fmtAmount(in.Amount, debt.Currency)+" · с «"+acc.Name+"»", in.Amount, debt.Currency, before)
+
+	return c.NoContent(http.StatusOK)
+}
+
+// repayLent records a repayment of money you lent out: money comes INTO the
+// account (income) and the receivable ("Долг мне") goes down. Mirror of payDebt.
+func (s *Server) repayLent(c echo.Context) error {
+	uid := c.Get(ctxUserID).(uint)
+	lent, err := s.findAsset(uid, c.Param("id"))
+	if err != nil || lent.Kind != model.KindLent {
+		return echo.NewHTTPError(http.StatusNotFound, "not found")
+	}
+	var in payInput
+	if err := c.Bind(&in); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+	}
+	if in.Amount <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "amount must be positive")
+	}
+	var acc model.Asset
+	if err := s.db.Where("id = ? AND user_id = ? AND is_account = ?", in.AccountID, uid, true).First(&acc).Error; err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "account not found")
+	}
+	date := time.Now()
+	if in.Date != nil && *in.Date != "" {
+		if d, err := time.Parse("2006-01-02", *in.Date); err == nil {
+			date = d
+		}
+	}
+	before, _ := s.netWorthUSD(uid)
+	rates, _ := s.userRates(uid)
+	credit := round2(calc.Convert(in.Amount, lent.Currency, acc.Currency, rates))
+
+	newBal := lent.Value - in.Amount
+	if newBal < 0 {
+		newBal = 0
+	}
+	lent.Value = round2(newBal)
+	s.db.Save(&lent)
+
+	lid := lent.ID
+	note := "Возврат: " + lent.Name
+	if lent.Currency != acc.Currency {
+		note += " (" + fmtAmount(in.Amount, lent.Currency) + ")"
+	}
+	s.db.Create(&model.AccountEntry{
+		UserID: uid, AccountID: acc.ID, Date: date, Kind: "income", Amount: credit,
+		Note: note, Source: "lent_repayment", LinkedDebtID: &lid, DebtAmount: in.Amount,
+	})
+	s.recomputeAccount(uid, acc.ID)
+
+	s.logActivity(uid, "lent_repayment", "Возврат по «"+lent.Name+"»",
+		fmtAmount(in.Amount, lent.Currency)+" · на «"+acc.Name+"»", in.Amount, lent.Currency, before)
 
 	return c.NoContent(http.StatusOK)
 }

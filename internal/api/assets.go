@@ -19,17 +19,18 @@ var kindLabels = map[model.AssetKind]string{
 	model.KindCash:       "Наличные и счета",
 	model.KindMetals:     "Металлы",
 	model.KindInvestment: "Инвестиции",
+	model.KindLent:       "Долг мне",
 	model.KindDebt:       "Кредиты и долги",
 }
 
 // order used for categories; assetKindOrder excludes debt for composition.
 var kindOrder = []model.AssetKind{
 	model.KindRealEstate, model.KindCar, model.KindDeposit,
-	model.KindCash, model.KindMetals, model.KindInvestment, model.KindDebt,
+	model.KindCash, model.KindMetals, model.KindInvestment, model.KindLent, model.KindDebt,
 }
 var assetKindOrder = []model.AssetKind{
 	model.KindRealEstate, model.KindCar, model.KindDeposit,
-	model.KindCash, model.KindMetals, model.KindInvestment,
+	model.KindCash, model.KindMetals, model.KindInvestment, model.KindLent,
 }
 
 var validCurrency = map[string]bool{"USD": true, "TJS": true, "UZS": true}
