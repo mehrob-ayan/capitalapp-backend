@@ -83,6 +83,7 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 	authed.GET("/history", s.history)
 	authed.GET("/history/composition", s.composition)
 	authed.PATCH("/history/:date", s.patchSnapshot)
+	authed.PATCH("/history/:date/note", s.patchSnapshotNote)
 	authed.DELETE("/history/:date", s.deleteSnapshot)
 	authed.GET("/efficiency", s.efficiency)
 

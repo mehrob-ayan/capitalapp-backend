@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"capitalapp/internal/calc"
@@ -104,6 +105,7 @@ type historyPoint struct {
 	NetWorth    float64 `json:"netWorth"`
 	Assets      float64 `json:"assets"`
 	Liabilities float64 `json:"liabilities"`
+	Note        string  `json:"note"`
 }
 
 type historyResp struct {
@@ -169,6 +171,7 @@ func (s *Server) history(c echo.Context) error {
 			NetWorth:    round2(nw),
 			Assets:      round2(as),
 			Liabilities: round2(li),
+			Note:        sn.Note,
 		})
 	}
 
@@ -294,6 +297,32 @@ func (s *Server) patchSnapshot(c echo.Context) error {
 	}
 	if err := s.db.Where(model.Snapshot{UserID: uid, Date: day.UTC().Truncate(24 * time.Hour)}).
 		Assign(upd).FirstOrCreate(&model.Snapshot{}).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+type snapshotNote struct {
+	Note string `json:"note"`
+}
+
+// patchSnapshotNote sets (or clears) the free-text note on a day's snapshot,
+// without touching the stored capital figures. Kept separate from
+// patchSnapshot so annotating a day never overwrites its assets/liabilities
+// breakdown. Creates the row if the day has no snapshot yet.
+func (s *Server) patchSnapshotNote(c echo.Context) error {
+	uid := c.Get(ctxUserID).(uint)
+	day, err := time.Parse("2006-01-02", c.Param("date"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "bad date")
+	}
+	var in snapshotNote
+	if err := c.Bind(&in); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+	}
+	if err := s.db.Where(model.Snapshot{UserID: uid, Date: day.UTC().Truncate(24 * time.Hour)}).
+		Assign(map[string]any{"note": strings.TrimSpace(in.Note)}).
+		FirstOrCreate(&model.Snapshot{}).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
 	return c.NoContent(http.StatusOK)

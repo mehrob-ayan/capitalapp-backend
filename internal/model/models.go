@@ -152,6 +152,10 @@ type Snapshot struct {
 	// (non-flagged assets + vested options), for the "composition over time"
 	// chart. Empty on legacy rows.
 	CompositionUSD string `json:"-"`
+
+	// Note is a free-text annotation the user attaches to a day to explain why
+	// capital moved (e.g. "добавил долг"). Preserved across snapshot re-runs.
+	Note string `json:"note"`
 }
 
 // AssetValue records the value of a single asset on a given day, so its own
