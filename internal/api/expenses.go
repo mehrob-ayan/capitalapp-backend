@@ -2,12 +2,76 @@ package api
 
 import (
 	"net/http"
+	"sort"
 	"time"
 
 	"capitalapp/internal/model"
 
 	"github.com/labstack/echo/v4"
 )
+
+// synthIDBase offsets account-derived (synthetic) transaction IDs so they never
+// collide with real Transaction IDs. These rows aren't stored — they mirror
+// account movements into the expenses view at read time.
+const synthIDBase = 1_000_000_000
+
+// accountCatSource maps an account movement to an expenses category + a source
+// tag the UI uses to mark it read-only (edited from the account ledger only).
+func accountCatSource(e model.AccountEntry) (category, source string) {
+	switch e.Source {
+	case "salary_auto":
+		return "Зарплата", "salary_auto"
+	case "debt_payment":
+		return "Кредиты и долги", "debt_payment"
+	case "lent_repayment":
+		return "Возврат долга", "lent_repayment"
+	default: // manual entry on an account
+		if e.Kind == "income" {
+			return "Пополнение счёта", "account"
+		}
+		return "Прочее", "account"
+	}
+}
+
+// accountCashRows turns account movements in [start,end) into read-only
+// pseudo-transactions so real cash flow (salary, debt payments, top-ups) shows
+// up in the expenses module. Opening balances are skipped — they're initial
+// state, not income.
+func (s *Server) accountCashRows(uid uint, start, end time.Time) []model.Transaction {
+	var entries []model.AccountEntry
+	s.db.Where("user_id = ? AND date >= ? AND date < ? AND source <> 'opening'", uid, start, end).Find(&entries)
+	if len(entries) == 0 {
+		return nil
+	}
+	accCur := map[uint]string{}
+	var accs []model.Asset
+	s.db.Where("user_id = ? AND is_account = ?", uid, true).Find(&accs)
+	for _, a := range accs {
+		accCur[a.ID] = a.Currency
+	}
+	rows := make([]model.Transaction, 0, len(entries))
+	for _, e := range entries {
+		typ := "expense"
+		if e.Kind == "income" {
+			typ = "income"
+		}
+		cat, src := accountCatSource(e)
+		rows = append(rows, model.Transaction{
+			ID: synthIDBase + e.ID, UserID: uid, Date: e.Date, Type: typ, Category: cat,
+			Amount: round2(e.Amount), Currency: accCur[e.AccountID], Note: e.Note, Source: src,
+		})
+	}
+	return rows
+}
+
+func sortTxDesc(txs []model.Transaction) {
+	sort.SliceStable(txs, func(i, j int) bool {
+		if !txs[i].Date.Equal(txs[j].Date) {
+			return txs[i].Date.After(txs[j].Date)
+		}
+		return txs[i].ID > txs[j].ID
+	})
+}
 
 func (s *Server) expenseCategories(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{
@@ -58,6 +122,12 @@ func (s *Server) expenses(c echo.Context) error {
 	var txs []model.Transaction
 	if err := q.Order("date desc, id desc").Find(&txs).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+	}
+	// Account movements (salary, debt payments, top-ups) belong to the whole
+	// household, not a specific person — only fold them in on the unfiltered view.
+	if person == "" {
+		txs = append(txs, s.accountCashRows(uid, start, end)...)
+		sortTxDesc(txs)
 	}
 
 	// Distinct people this month (ignores the person filter, for the chips).
@@ -169,6 +239,7 @@ func (s *Server) monthlyTrend(uid uint, viewedStart, viewedEnd time.Time) []mont
 	trendStart := viewedStart.AddDate(0, -5, 0)
 	var txs []model.Transaction
 	s.db.Where("user_id = ? AND date >= ? AND date < ?", uid, trendStart, viewedEnd).Find(&txs)
+	txs = append(txs, s.accountCashRows(uid, trendStart, viewedEnd)...)
 
 	idx := map[string]int{}
 	out := make([]monthTrend, 6)
