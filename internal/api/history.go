@@ -222,12 +222,27 @@ func (s *Server) composition(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
 
-	present := map[string]bool{}
-	points := make([]compositionPoint, 0, len(snaps))
+	// Collapse to one point per calendar month (the month's last snapshot) —
+	// this chart is "composition BY MONTH", so daily snapshots within a month
+	// must not each become their own column. Snapshots arrive date-ascending,
+	// so overwriting keeps the latest and `order` preserves chronology.
+	lastOfMonth := make(map[string]model.Snapshot)
+	var order []string
 	for _, sn := range snaps {
 		if sn.CompositionUSD == "" {
 			continue
 		}
+		key := sn.Date.Format("2006-01")
+		if _, seen := lastOfMonth[key]; !seen {
+			order = append(order, key)
+		}
+		lastOfMonth[key] = sn
+	}
+
+	present := map[string]bool{}
+	points := make([]compositionPoint, 0, len(order))
+	for _, key := range order {
+		sn := lastOfMonth[key]
 		var raw map[string]float64
 		if json.Unmarshal([]byte(sn.CompositionUSD), &raw) != nil {
 			continue
