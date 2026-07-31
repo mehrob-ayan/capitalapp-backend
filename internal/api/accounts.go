@@ -47,6 +47,7 @@ func (s *Server) accountRow(a model.Asset, salaryID *uint) accountResp {
 // listAccounts returns the user's ledger accounts (cash assets marked IsAccount).
 func (s *Server) listAccounts(c echo.Context) error {
 	uid := c.Get(ctxUserID).(uint)
+	s.postSalary(uid) // catch up any due salary before showing balances
 	user, _ := s.loadUser(uid)
 	var accs []model.Asset
 	if err := s.db.Where("user_id = ? AND is_account = ?", uid, true).Order("created_at").Find(&accs).Error; err != nil {
@@ -144,7 +145,9 @@ func (s *Server) accountEntries(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "account not found")
 	}
 	var entries []model.AccountEntry
-	s.db.Where("user_id = ? AND account_id = ?", uid, id).Order("date desc, id desc").Find(&entries)
+	// Order by when each movement was actually recorded, so the ledger reads in
+	// the true sequence operations were made (date alone can't tell same-day order).
+	s.db.Where("user_id = ? AND account_id = ?", uid, id).Order("created_at desc, id desc").Find(&entries)
 	user, _ := s.loadUser(uid)
 	return c.JSON(http.StatusOK, entriesResp{Account: s.accountRow(a, user.SalaryAccountID), Entries: entries})
 }
@@ -298,6 +301,22 @@ func (s *Server) payDebt(c echo.Context) error {
 	// sides stay honest (e.g. paying a сомони mortgage from a сумы account).
 	rates, _ := s.userRates(uid)
 	debit := round2(calc.Convert(in.Amount, debt.Currency, acc.Currency, rates))
+
+	// A manual payment breaks a fixed instalment schedule. Switch annuity /
+	// differentiated debts to balance-driven pay-down so the payment stays the
+	// same and the term shortens (bank-style curtailment) — the way every other
+	// debt here behaves. The current scheduled payment becomes the fixed payment.
+	scheme := calc.DebtScheme(debt.DebtScheme)
+	if scheme == calc.SchemeAnnuity || scheme == calc.SchemeDifferentiated {
+		if ls := calc.Compute(debt, debt.Currency, rates, time.Now()).Loan; ls != nil && ls.MonthlyPayment > 0 && debt.MonthlyPayment <= 0 {
+			debt.MonthlyPayment = round2(ls.MonthlyPayment)
+		}
+		if debt.RatePercent > 0 {
+			debt.DebtScheme = string(calc.SchemeAccruing)
+		} else {
+			debt.DebtScheme = string(calc.SchemeInterestFree)
+		}
+	}
 
 	// Reduce the debt balance (in its own currency) and re-anchor accrual to now.
 	newBal := debt.Value - in.Amount

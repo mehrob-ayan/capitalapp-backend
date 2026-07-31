@@ -172,7 +172,13 @@ func LoanFromBalance(balance, annualRatePct, payment float64, asOf time.Time) Lo
 	}
 	ls.RemainingMonths = int(n)
 	ls.PayoffDate = asOf.AddDate(0, int(n), 0)
-	ls.TotalInterest = math.Max(payment*n-balance, 0)
+	// Interest-free debt has no overpayment: payment*n exceeds the balance only
+	// because the final instalment is smaller, not because interest was paid.
+	if i == 0 {
+		ls.TotalInterest = 0
+	} else {
+		ls.TotalInterest = math.Max(payment*n-balance, 0)
+	}
 	return ls
 }
 

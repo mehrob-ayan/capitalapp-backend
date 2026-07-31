@@ -67,6 +67,7 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 	authed.GET("/assets/:id", s.getAsset)
 	authed.GET("/assets/:id/history", s.assetHistory)
 	authed.PATCH("/assets/:id", s.updateAsset)
+	authed.POST("/assets/:id/topup", s.topupDeposit)
 	authed.DELETE("/assets/:id", s.deleteAsset)
 
 	authed.GET("/rates", s.getRates)

@@ -94,6 +94,7 @@ type salarySchedResp struct {
 // already-passed ones are dropped (the worker posts those).
 func (s *Server) salarySchedule(c echo.Context) error {
 	uid := c.Get(ctxUserID).(uint)
+	s.postSalary(uid) // catch up due paydays so posted flags are current
 	var u model.User
 	if s.db.First(&u, uid).Error != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "user not found")

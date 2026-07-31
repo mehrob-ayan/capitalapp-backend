@@ -105,6 +105,10 @@ func (s *Server) overview(c echo.Context) error {
 	}
 	base := baseOr(user.BaseCurrency)
 
+	// Post any salary due since the last check, so it's there the moment the
+	// app is opened on payday — not only after the hourly worker ticks.
+	s.postSalary(uid)
+
 	var assets []model.Asset
 	if err := s.db.Where("user_id = ?", uid).Find(&assets).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -333,6 +337,46 @@ func (s *Server) updateAsset(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
 	return c.JSON(http.StatusOK, assetResp{Asset: updated, Metrics: calc.Compute(updated, base, rates, time.Now())})
+}
+
+type topupInput struct {
+	Amount float64 `json:"amount"`
+}
+
+// topupDeposit adds funds to a deposit: the current accrued balance becomes the
+// new principal plus the top-up, re-anchored to now. Adding (not replacing) is
+// the intuitive "пополнить" — editing the value by hand risked wiping the balance.
+func (s *Server) topupDeposit(c echo.Context) error {
+	uid := c.Get(ctxUserID).(uint)
+	base, err := s.userBase(uid)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	}
+	a, err := s.findAsset(uid, c.Param("id"))
+	if err != nil || a.Kind != model.KindDeposit {
+		return echo.NewHTTPError(http.StatusNotFound, "deposit not found")
+	}
+	var in topupInput
+	if err := c.Bind(&in); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+	}
+	if in.Amount <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "amount must be positive")
+	}
+	before, _ := s.netWorthUSD(uid)
+	accrued := calc.AccrueBalance(a.Value, a.RatePercent, a.BalanceAsOf, time.Now())
+	a.Value = round2(accrued + in.Amount)
+	a.BalanceAsOf = time.Now()
+	if err := s.db.Save(&a).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+	}
+	s.recordAssetValue(a.ID, uid, a.Value)
+	s.logActivity(uid, "asset_edited", "Пополнение · "+a.Name, "+"+fmtAmount(in.Amount, a.Currency), in.Amount, a.Currency, before)
+	rates, err := s.userRates(uid)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
+	}
+	return c.JSON(http.StatusOK, assetResp{Asset: a, Metrics: calc.Compute(a, base, rates, time.Now())})
 }
 
 func (s *Server) deleteAsset(c echo.Context) error {
