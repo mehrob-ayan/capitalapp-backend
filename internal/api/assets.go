@@ -257,6 +257,11 @@ func (s *Server) createAsset(c echo.Context) error {
 	}
 	before, _ := s.netWorthUSD(uid)
 	a.BalanceAsOf = time.Now() // anchor interest accrual to now
+	// For deposits, Invested tracks total contributions (initial + top-ups) so
+	// "Начислено процентов" = accrued − invested survives capitalization.
+	if a.Kind == model.KindDeposit && a.Invested <= 0 {
+		a.Invested = a.Value
+	}
 	// Cash is a ledger account: its balance comes from entries (add funds /
 	// withdraw), with history — the typed amount becomes the opening entry.
 	if a.Kind == model.KindCash {
@@ -324,6 +329,11 @@ func (s *Server) updateAsset(c echo.Context) error {
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
 	updated.BalanceAsOf = time.Now() // re-anchor: the entered balance is current as of now
+	// Preserve the deposit's contributions baseline across edits, so lifetime
+	// interest (accrued − invested) isn't wiped when the balance is re-entered.
+	if updated.Kind == model.KindDeposit {
+		updated.Invested = existing.Invested
+	}
 	before, _ := s.netWorthUSD(uid)
 	if err := s.db.Save(&updated).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
@@ -365,6 +375,12 @@ func (s *Server) topupDeposit(c echo.Context) error {
 	}
 	before, _ := s.netWorthUSD(uid)
 	accrued := calc.AccrueBalance(a.Value, a.RatePercent, a.BalanceAsOf, time.Now())
+	// Grow the contributions baseline by the top-up (keeps earned interest visible).
+	contrib := a.Invested
+	if contrib <= 0 {
+		contrib = accrued
+	}
+	a.Invested = round2(contrib + in.Amount)
 	a.Value = round2(accrued + in.Amount)
 	a.BalanceAsOf = time.Now()
 	if err := s.db.Save(&a).Error; err != nil {

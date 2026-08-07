@@ -28,5 +28,6 @@ func Migrate(db *gorm.DB) error {
 		&model.Activity{},
 		&model.RateHistory{},
 		&model.AccountEntry{},
+		&model.DailyBrief{},
 	)
 }

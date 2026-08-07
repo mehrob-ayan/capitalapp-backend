@@ -108,6 +108,10 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 	authed.GET("/lent/:id/repayments", s.debtPayments)
 	authed.GET("/salary/schedule", s.salarySchedule)
 
+	authed.POST("/advisor/credit/:id", s.auditCredit)
+	authed.POST("/advisor/portfolio", s.auditPortfolio)
+	authed.GET("/advisor/brief", s.dailyBrief)
+
 	authed.GET("/options", s.listOptions)
 	authed.POST("/options", s.createOption)
 	authed.PATCH("/options/:id", s.updateOption)

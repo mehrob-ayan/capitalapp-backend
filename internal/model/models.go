@@ -213,6 +213,16 @@ type Activity struct {
 	NetAfterUSD  float64   `json:"netAfterUsd"`
 }
 
+// DailyBrief caches the in-app helper's daily summary so opening the app
+// repeatedly doesn't re-run the model — one brief per user per day.
+type DailyBrief struct {
+	ID        uint      `gorm:"primaryKey" json:"-"`
+	UserID    uint      `gorm:"uniqueIndex:idx_brief_user_date;not null" json:"-"`
+	Date      time.Time `gorm:"uniqueIndex:idx_brief_user_date;not null" json:"-"`
+	Markdown  string    `json:"markdown"`
+	CreatedAt time.Time `json:"generatedAt"`
+}
+
 // AccountEntry is one movement on a ledger account: income in (+) or payment /
 // withdrawal out (−). The account's balance is the sum of its entries, so any
 // entry can be added, edited or deleted and the balance stays consistent.
