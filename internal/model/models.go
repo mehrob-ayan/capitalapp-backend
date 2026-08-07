@@ -246,16 +246,26 @@ type AccountEntry struct {
 // Quantity × UnitPrice. Only crystallized grants count toward net worth; grants
 // still vesting — or not yet received — are shown separately until they vest.
 type OptionGrant struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	UserID     uint      `gorm:"index;not null" json:"-"`
-	Name       string    `json:"name"`
-	Quantity   float64   `json:"quantity"`
-	UnitPrice  float64   `json:"unitPrice"`
-	Currency   string    `gorm:"not null" json:"currency"`
-	GrantDate  time.Time `json:"grantDate"`
-	VestMonths int       `json:"vestMonths"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID        uint    `gorm:"primaryKey" json:"id"`
+	UserID    uint    `gorm:"index;not null" json:"-"`
+	Name      string  `json:"name"`
+	Quantity  float64 `json:"quantity"`
+	UnitPrice float64 `json:"unitPrice"` // legacy/RSU: value per option when no strike is set
+	Currency  string  `gorm:"not null" json:"currency"`
+
+	// Real stock options: value = quantity × max(0, MarketPrice − Strike).
+	// When MarketPrice is 0 the grant falls back to Quantity × UnitPrice (RSU /
+	// free grant with a known value per option).
+	Strike      float64 `json:"strike"`      // exercise price per share
+	MarketPrice float64 `json:"marketPrice"` // current fair value per share
+
+	GrantDate        time.Time  `json:"grantDate"`
+	VestMonths       int        `json:"vestMonths"`
+	FullVestDate     *time.Time `json:"fullVestDate,omitempty"`     // explicit cliff date (overrides grant+months)
+	ExerciseDeadline *time.Time `json:"exerciseDeadline,omitempty"` // options expire if not exercised by this date
+
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Goal is a target capital amount. Progress is computed against current net
