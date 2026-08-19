@@ -350,7 +350,8 @@ func (s *Server) updateAsset(c echo.Context) error {
 }
 
 type topupInput struct {
-	Amount float64 `json:"amount"`
+	Amount    float64 `json:"amount"`
+	AccountID *uint   `json:"accountId"` // fund the top-up from this account (a transfer, not spending)
 }
 
 // topupDeposit adds funds to a deposit: the current accrued balance becomes the
@@ -387,11 +388,30 @@ func (s *Server) topupDeposit(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
 	s.recordAssetValue(a.ID, uid, a.Value)
-	s.logActivity(uid, "asset_edited", "Пополнение · "+a.Name, "+"+fmtAmount(in.Amount, a.Currency), in.Amount, a.Currency, before)
 	rates, err := s.userRates(uid)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "db error")
 	}
+	// Funded from an account? Record it as a transfer OUT of that account
+	// (source "deposit_topup"), not a spend — so it doesn't dent the
+	// capitalization rate or show up as an expense. Net worth is unchanged:
+	// money just moved from the account into the deposit.
+	if in.AccountID != nil {
+		var acc model.Asset
+		if s.db.Where("id = ? AND user_id = ? AND is_account = ?", *in.AccountID, uid, true).First(&acc).Error == nil {
+			debit := round2(calc.Convert(in.Amount, a.Currency, acc.Currency, rates))
+			note := "Перевод на вклад: " + a.Name
+			if a.Currency != acc.Currency {
+				note += " (" + fmtAmount(in.Amount, a.Currency) + ")"
+			}
+			s.db.Create(&model.AccountEntry{
+				UserID: uid, AccountID: acc.ID, Date: time.Now(), Kind: "payment",
+				Amount: debit, Note: note, Source: "deposit_topup",
+			})
+			s.recomputeAccount(uid, acc.ID)
+		}
+	}
+	s.logActivity(uid, "asset_edited", "Пополнение · "+a.Name, "+"+fmtAmount(in.Amount, a.Currency), in.Amount, a.Currency, before)
 	return c.JSON(http.StatusOK, assetResp{Asset: a, Metrics: calc.Compute(a, base, rates, time.Now())})
 }
 

@@ -39,7 +39,9 @@ func accountCatSource(e model.AccountEntry) (category, source string) {
 // state, not income.
 func (s *Server) accountCashRows(uid uint, start, end time.Time) []model.Transaction {
 	var entries []model.AccountEntry
-	s.db.Where("user_id = ? AND date >= ? AND date < ? AND source <> 'opening'", uid, start, end).Find(&entries)
+	// Opening balances and internal transfers (e.g. moving cash into a deposit)
+	// aren't income or spending — leave them out of the expenses view.
+	s.db.Where("user_id = ? AND date >= ? AND date < ? AND source NOT IN ('opening','deposit_topup')", uid, start, end).Find(&entries)
 	if len(entries) == 0 {
 		return nil
 	}
