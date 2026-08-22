@@ -107,7 +107,7 @@ func (s *Server) updateMe(c echo.Context) error {
 		// if the API is unreachable, the toggle is still saved and manual
 		// rates stay until the next daily attempt.
 		if *req.AutoRates {
-			_ = s.syncRates(uid)
+			_ = s.syncRates(uid, "Курс обновлён автоматически")
 		}
 	}
 	if req.MonthlyIncome != nil {

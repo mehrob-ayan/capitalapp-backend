@@ -72,6 +72,7 @@ func New(cfg config.Config, database *gorm.DB) *echo.Echo {
 
 	authed.GET("/rates", s.getRates)
 	authed.PATCH("/rates", s.updateRates)
+	authed.POST("/rates/refresh", s.refreshRates)
 
 	authed.GET("/export", s.exportData)
 	authed.POST("/import", s.importData)
