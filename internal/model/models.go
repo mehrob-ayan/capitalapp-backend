@@ -91,6 +91,10 @@ type Asset struct {
 	// swing capital when the paying account isn't tracked.
 	ExcludeFromNetWorth bool `gorm:"default:false" json:"excludeFromNetWorth"`
 
+	// ShowAsGoal surfaces a debt on the Goals page as a payoff goal (progress
+	// toward closing it), in addition to the debts list.
+	ShowAsGoal bool `gorm:"default:false" json:"showAsGoal"`
+
 	// IsAccount marks a cash asset as a ledger account: its balance (Value) is
 	// the sum of its AccountEntries (salary in, payments out), not typed directly.
 	IsAccount bool `gorm:"default:false" json:"isAccount"`
@@ -277,6 +281,10 @@ type Goal struct {
 	TargetAmount        float64   `json:"targetAmount"`
 	Currency            string    `gorm:"not null" json:"currency"`
 	MonthlyContribution float64   `json:"monthlyContribution"`
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedAt           time.Time `json:"updatedAt"`
+	// LinkedAssetID optionally ties the goal to a real account/deposit (a savings
+	// pot). When set, progress is measured against that asset's balance instead of
+	// total net worth.
+	LinkedAssetID *uint     `json:"linkedAssetId"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }

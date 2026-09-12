@@ -153,10 +153,11 @@ func (s *Server) accountEntries(c echo.Context) error {
 }
 
 type entryInput struct {
-	Kind   string  `json:"kind"` // income | payment
-	Amount float64 `json:"amount"`
-	Note   string  `json:"note"`
-	Date   *string `json:"date"`
+	Kind     string  `json:"kind"` // income | payment
+	Amount   float64 `json:"amount"`
+	Currency string  `json:"currency"` // optional: enter in another currency, convert to the account's
+	Note     string  `json:"note"`
+	Date     *string `json:"date"`
 }
 
 func (s *Server) addEntry(c echo.Context) error {
@@ -169,7 +170,7 @@ func (s *Server) addEntry(c echo.Context) error {
 	if err := s.db.Where("id = ? AND user_id = ? AND is_account = ?", id, uid, true).First(&a).Error; err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "account not found")
 	}
-	e, err := bindEntry(c, uid, id)
+	e, err := s.bindEntry(c, uid, id)
 	if err != nil {
 		return err
 	}
@@ -187,7 +188,7 @@ func (s *Server) updateEntry(c echo.Context) error {
 	if err := s.db.Where("id = ? AND user_id = ?", c.Param("id"), uid).First(&e).Error; err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "entry not found")
 	}
-	ne, err := bindEntry(c, uid, e.AccountID)
+	ne, err := s.bindEntry(c, uid, e.AccountID)
 	if err != nil {
 		return err
 	}
@@ -230,7 +231,7 @@ func (s *Server) deleteEntry(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func bindEntry(c echo.Context, uid, accountID uint) (model.AccountEntry, error) {
+func (s *Server) bindEntry(c echo.Context, uid, accountID uint) (model.AccountEntry, error) {
 	var in entryInput
 	if err := c.Bind(&in); err != nil {
 		return model.AccountEntry{}, echo.NewHTTPError(http.StatusBadRequest, "invalid body")
@@ -247,7 +248,27 @@ func bindEntry(c echo.Context, uid, accountID uint) (model.AccountEntry, error) 
 			date = d
 		}
 	}
-	return model.AccountEntry{UserID: uid, AccountID: accountID, Date: date, Kind: in.Kind, Amount: in.Amount, Note: in.Note}, nil
+
+	amount, note := in.Amount, in.Note
+	// Entered in another currency? Convert to the account's currency at the
+	// current rate and note the original amount (like debt payments).
+	if in.Currency != "" && validCurrency[in.Currency] {
+		var acc model.Asset
+		if s.db.Where("id = ? AND user_id = ?", accountID, uid).First(&acc).Error == nil && in.Currency != acc.Currency {
+			rates, _ := s.userRates(uid)
+			if conv := round2(calc.Convert(in.Amount, in.Currency, acc.Currency, rates)); conv > 0 {
+				orig := "введено " + fmtAmount(in.Amount, in.Currency)
+				if note != "" {
+					note += " · " + orig
+				} else {
+					note = orig
+				}
+				amount = conv
+			}
+		}
+	}
+
+	return model.AccountEntry{UserID: uid, AccountID: accountID, Date: date, Kind: in.Kind, Amount: amount, Note: note}, nil
 }
 
 // debtPayments returns the payment history for a debt (entries linked to it).

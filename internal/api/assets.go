@@ -55,6 +55,7 @@ type assetInput struct {
 	Subtype             string  `json:"subtype"`
 	Status              string  `json:"status"`
 	ExcludeFromNetWorth bool    `json:"excludeFromNetWorth"`
+	ShowAsGoal          bool    `json:"showAsGoal"`
 	DebtScheme          string  `json:"debtScheme"`
 	LoanType            string  `json:"loanType"`
 	TermMonths          int     `json:"termMonths"`
@@ -79,7 +80,8 @@ type categorySummary struct {
 	Kind         string  `json:"kind"`
 	Label        string  `json:"label"`
 	SubtotalBase float64 `json:"subtotalBase"`
-	Count        int     `json:"count"`
+	Count        int     `json:"count"`   // active items
+	Closed       int     `json:"closed"`  // fully-paid debts / repaid receivables
 	IsLiability  bool    `json:"isLiability"`
 }
 
@@ -126,6 +128,7 @@ func (s *Server) overview(c echo.Context) error {
 	var totalAssets, totalLiab, totalFlow, nwAssets, nwLiab float64
 	byKindValue := map[model.AssetKind]float64{}
 	byKindCount := map[model.AssetKind]int{}
+	byKindClosed := map[model.AssetKind]int{}
 	compValue := map[model.AssetKind]float64{}
 
 	for _, a := range assets {
@@ -135,7 +138,15 @@ func (s *Server) overview(c echo.Context) error {
 		// Monthly flow is real cash you move each month, so it counts every
 		// item — including debts flagged out of net worth (you still pay them).
 		totalFlow += m.MonthlyFlowBase
-		byKindCount[a.Kind]++
+		// A fully-paid debt / repaid receivable is "closed": count it separately
+		// so it drops out of the active list instead of cluttering it.
+		closed := (a.Kind == model.KindDebt && m.LiabilityBase <= 0.5) ||
+			(a.Kind == model.KindLent && m.ValueBase <= 0.5)
+		if closed {
+			byKindClosed[a.Kind]++
+		} else {
+			byKindCount[a.Kind]++
+		}
 		if a.Kind == model.KindDebt {
 			byKindValue[a.Kind] += m.LiabilityBase
 		} else {
@@ -189,12 +200,12 @@ func (s *Server) overview(c echo.Context) error {
 
 	cats := make([]categorySummary, 0, len(kindOrder)+1)
 	for _, k := range kindOrder {
-		if byKindCount[k] == 0 {
+		if byKindCount[k] == 0 && byKindClosed[k] == 0 {
 			continue
 		}
 		cats = append(cats, categorySummary{
 			Kind: string(k), Label: kindLabels[k],
-			SubtotalBase: round2(byKindValue[k]), Count: byKindCount[k],
+			SubtotalBase: round2(byKindValue[k]), Count: byKindCount[k], Closed: byKindClosed[k],
 			IsLiability: k == model.KindDebt,
 		})
 	}
@@ -491,6 +502,7 @@ func (in assetInput) toModel(uid uint) (model.Asset, error) {
 		Subtype:             in.Subtype,
 		Status:              in.Status,
 		ExcludeFromNetWorth: in.ExcludeFromNetWorth,
+		ShowAsGoal:          in.ShowAsGoal,
 		DebtScheme:          in.DebtScheme,
 		LoanType:            in.LoanType,
 		TermMonths:          in.TermMonths,
